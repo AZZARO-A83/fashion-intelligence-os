@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Brands & Stores ────────────────────────────────────────────────
+model Brand {
+  id          String   @id @default(cuid())
+  name        String
+  shopifyUrl  String?
+  industry    String   @default("fashion")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaigns    Campaign[]
+  competitors  Competitor[]
+  salesData    SalesSnapshot[]
+  trendData    TrendSnapshot[]
+  contentPiece ContentPiece[]
+}
+
+// ─── Campaigns ───────────────────────────────────────────────────────
+model Campaign {
+  id              String   @id @default(cuid())
+  brandId         String
+  name            String
+  objective       String
+  audience        String
+  offer           String?
+  platforms       String[] // ["instagram","tiktok","email"]
+  contentTypes    String[] // ["reel","carousel","story"]
+  hooks           String[]
+  captions        String[]
+  cta             String?
+  visualDirection String?
+  estimatedKPIs   Json?
+  confidenceScore Float    @default(0)
+  explanation     String   @db.Text
+  month           Int
+  year            Int
+  status          CampaignStatus @default(DRAFT)
+  predictedROI    Float?
+  actualROI       Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@index([brandId, month, year])
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+// ─── Sales Snapshots ─────────────────────────────────────────────────
+model SalesSnapshot {
+  id                 String   @id @default(cuid())
+  brandId            String
+  snapshotDate       DateTime
+  totalRevenue       Float
+  totalOrders        Int
+  avgOrderValue      Float
+  conversionRate     Float
+  topProducts        Json     // [{ name, revenue, units, growth }]
+  lowProducts        Json
+  abandonedCarts     Int
+  repeatPurchaseRate Float
+  weeklyGrowth       Float
+  insights           Json     // AI-generated insight strings
+  createdAt          DateTime @default(now())
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@index([brandId, snapshotDate])
+}
+
+// ─── Competitors ─────────────────────────────────────────────────────
+model Competitor {
+  id          String   @id @default(cuid())
+  brandId     String
+  name        String
+  instagramHandle String?
+  tiktokHandle    String?
+  facebookPage    String?
+  website         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  brand     Brand @relation(fields: [brandId], references: [id])
+  snapshots CompetitorSnapshot[]
+}
+
+model CompetitorSnapshot {
+  id               String   @id @default(cuid())
+  competitorId     String
+  snapshotDate     DateTime
+  instagramPosts   Int      @default(0)
+  avgEngagement    Float    @default(0)
+  topHashtags      String[]
+  contentThemes    String[]
+  postingFrequency Float    @default(0) // posts per week
+  tiktokVideos     Int      @default(0)
+  tiktokAvgViews   Float    @default(0)
+  activeCampaigns  Json?    // detected campaigns
+  insights         String[] // AI-generated insights
+  createdAt        DateTime @default(now())
+
+  competitor Competitor @relation(fields: [competitorId], references: [id])
+}
+
+// ─── Trends ──────────────────────────────────────────────────────────
+model TrendSnapshot {
+  id             String   @id @default(cuid())
+  brandId        String
+  platform       String   // "tiktok" | "instagram" | "meta"
+  trendName      String
+  trendScore     Float    // 0-100
+  growthRate     Float    // % weekly growth
+  relevanceScore Float    // 0-100, how relevant to brand
+  expectedPeakDays Int    // days until peak
+  hashtags       String[]
+  sounds         String[]
+  exampleUrls    String[]
+  category       String   // "aesthetic","color","style","product"
+  createdAt      DateTime @default(now())
+
+  brand Brand @relation(fields: [brandId], references: [id])
+
+  @@index([brandId, platform, trendScore])
+}
+
+// ─── Generated Content ───────────────────────────────────────────────
+model ContentPiece {
+  id          String      @id @default(cuid())
+  brandId     String
+  campaignId  String?
+  type        ContentType
+  platform    String
+  language    String      @default("ar-eg") // "ar-eg" | "en" | "mixed"
+  title       String
+  body        String      @db.Text
+  hook        String?
+  cta         String?
+  hashtags    String[]
+  createdAt   DateTime    @default(now())
+
+  brand Brand @relation(fields: [brandId], references: [id])
+}
+
+enum ContentType {
+  TIKTOK_SCRIPT
+  REEL_IDEA
+  CAROUSEL
+  CAPTION
+  EMAIL
+  AD_COPY
+  INFLUENCER_BRIEF
+  UGC_SCRIPT
+}

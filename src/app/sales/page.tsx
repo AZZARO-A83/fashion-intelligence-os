@@ -1,0 +1,221 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency, formatNumber } from "@/lib/utils";
+import { TrendingUp, TrendingDown, Sparkles, RefreshCw } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  AreaChart, Area, CartesianGrid,
+} from "recharts";
+import { SalesData } from "@/types";
+
+function InsightCard({ insight }: { insight: { metric?: string; value?: string; change?: number; trend?: string; explanation?: string } | string }) {
+  const text = typeof insight === "string" ? insight : insight.explanation ?? "";
+  const change = typeof insight === "object" ? insight.change : undefined;
+  const isUp = (change ?? 0) > 0;
+
+  return (
+    <div className="bg-surface-2 rounded-lg p-4 flex gap-3">
+      <div className={`w-1.5 rounded-full flex-shrink-0 ${isUp || change === undefined ? "bg-accent" : "bg-red-400"}`} />
+      <div>
+        {typeof insight === "object" && insight.metric && (
+          <p className="text-xs font-semibold text-foreground mb-1">{insight.metric}: {insight.value}</p>
+        )}
+        <p className="text-xs text-foreground-muted leading-relaxed">{text}</p>
+        {change !== undefined && (
+          <div className="flex items-center gap-1 mt-1.5">
+            {isUp ? (
+              <TrendingUp className="w-3 h-3 text-green-400" />
+            ) : (
+              <TrendingDown className="w-3 h-3 text-red-400" />
+            )}
+            <span className={`text-[10px] font-medium ${isUp ? "text-green-400" : "text-red-400"}`}>
+              {isUp ? "+" : ""}{change}% vs last period
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function SalesPage() {
+  const [data, setData] = useState<SalesData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = () => {
+    setRefreshing(true);
+    fetch("/api/sales")
+      .then((r) => r.json())
+      .then((d) => { setData(d); setLoading(false); setRefreshing(false); });
+  };
+
+  useEffect(() => { load(); }, []);
+
+  if (loading || !data) {
+    return (
+      <div className="p-8 space-y-6 animate-pulse">
+        <div className="grid grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-surface rounded-xl" />)}
+        </div>
+        <div className="h-64 bg-surface rounded-xl" />
+      </div>
+    );
+  }
+
+  const chartData = data.revenueByDay.slice(-14).map((d) => ({
+    ...d,
+    date: new Date(d.date).toLocaleDateString("en", { day: "2-digit", month: "short" }),
+  }));
+
+  return (
+    <div className="min-h-screen">
+      <PageHeader
+        title="Shopify Sales Intelligence"
+        subtitle="Data-driven insights from your store performance"
+        badge="Shopify Connected"
+        action={
+          <button
+            onClick={load}
+            className="flex items-center gap-2 bg-surface-2 border border-border text-foreground-muted px-3 py-2 rounded-lg text-xs hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh data
+          </button>
+        }
+      />
+
+      <div className="p-8 space-y-8">
+
+        {/* KPI Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Total Revenue" value={`EGP ${formatNumber(data.totalRevenue)}`} change={data.weeklyGrowth} sub="Last 30 days" accent />
+          <StatCard label="Total Orders" value={data.totalOrders.toLocaleString()} sub="Last 30 days" />
+          <StatCard label="Avg Order Value" value={`EGP ${data.avgOrderValue}`} sub="Per transaction" />
+          <StatCard label="Conversion Rate" value={`${data.conversionRate}%`} sub="Store visitors → buyers" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Repeat Purchase Rate" value={`${data.repeatPurchaseRate}%`} change={3.2} sub="Returning customers" />
+          <StatCard label="Abandoned Carts" value={data.abandonedCarts.toLocaleString()} change={-5} sub="This month" />
+          <StatCard label="Weekly Growth" value={`+${data.weeklyGrowth}%`} sub="Revenue WoW" />
+          <StatCard label="Recovery Opportunity" value={`EGP ${formatNumber(data.abandonedCarts * data.avgOrderValue * 0.1)}`} sub="Estimated cart recovery" accent />
+        </div>
+
+        {/* Revenue Chart */}
+        <div className="bg-surface border border-border/50 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Revenue Trend — Last 14 Days</h2>
+              <p className="text-xs text-muted mt-0.5">Daily revenue and order volume</p>
+            </div>
+            <Badge variant="success">+{data.weeklyGrowth}% WoW</Badge>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip
+                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: "#71717a" }}
+                formatter={(v: number) => [`EGP ${v.toLocaleString()}`, "Revenue"]}
+              />
+              <Area type="monotone" dataKey="revenue" stroke="#f59e0b" strokeWidth={2} fill="url(#revGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Top Products + Low Performers */}
+        <div className="grid grid-cols-2 gap-6">
+
+          {/* Top Products */}
+          <div className="bg-surface border border-border/50 rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-4">Top Performing Products</h2>
+            <div className="space-y-3">
+              {data.topProducts.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
+                  <span className="text-xs font-bold text-muted w-5 text-center">#{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                    <p className="text-xs text-muted mt-0.5">{p.units} units · EGP {p.revenue.toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3 text-green-400" />
+                    <span className="text-xs font-medium text-green-400">+{p.growth}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Products Bar Chart */}
+          <div className="bg-surface border border-border/50 rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-4">Revenue by Product</h2>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={data.topProducts} layout="vertical">
+                <XAxis type="number" tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <YAxis dataKey="name" type="category" tick={{ fill: "#71717a", fontSize: 9 }} axisLine={false} tickLine={false} width={130}
+                  tickFormatter={(v: string) => v.length > 18 ? v.slice(0, 18) + "…" : v}
+                />
+                <Tooltip
+                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 11 }}
+                  formatter={(v: number) => [`EGP ${v.toLocaleString()}`, "Revenue"]}
+                />
+                <Bar dataKey="revenue" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Low Performers */}
+        <div className="bg-surface border border-border/50 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingDown className="w-4 h-4 text-red-400" />
+            <h2 className="text-sm font-semibold text-foreground">Low Performing Products</h2>
+            <Badge variant="danger">Action needed</Badge>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {data.lowProducts.map((p, i) => (
+              <div key={i} className="p-4 bg-red-400/5 border border-red-400/20 rounded-lg">
+                <p className="text-sm font-medium text-foreground">{p.name}</p>
+                <p className="text-xs text-muted mt-1">EGP {p.revenue.toLocaleString()} · {p.units} units</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <TrendingDown className="w-3 h-3 text-red-400" />
+                  <span className="text-xs text-red-400 font-medium">{p.growth}% decline</span>
+                </div>
+                <p className="text-[10px] text-muted mt-2">
+                  {p.growth < -30 ? "Consider markdown or bundle promotion" : "Monitor — seasonal dip expected"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* AI Insights */}
+        <div className="bg-surface border border-border/50 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-4 h-4 text-accent" />
+            <h2 className="text-sm font-semibold text-foreground">AI Sales Insights</h2>
+            <Badge variant="accent">Claude-powered</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {Array.isArray(data.insights) && data.insights.map((insight, i) => (
+              <InsightCard key={i} insight={insight} />
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
