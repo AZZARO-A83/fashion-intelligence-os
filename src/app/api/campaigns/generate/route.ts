@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateMonthlyCampaigns } from "@/lib/claude";
-import { mockSalesData, mockTrends, mockCompetitors } from "@/lib/mock-data";
+import { getSalesData, buildSalesSummary } from "@/lib/shopify";
+import { RICH_TRENDS, buildTrendsSummary } from "@/lib/trend-engine";
 import { getSeasonalContext } from "@/lib/egyptian-context";
 import { CampaignGenerationInput } from "@/types";
 
@@ -12,33 +13,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "month and year are required" }, { status: 400 });
   }
 
+  // 🟢 Real Shopify sales data
+  const salesData = await getSalesData();
+  const salesSummary = buildSalesSummary(salesData);
   const seasonalContext = getSeasonalContext(month, year);
+  const trendsSummary = buildTrendsSummary();
 
-  const salesSummary = `
-Total Revenue: EGP ${mockSalesData.totalRevenue.toLocaleString()}
-Total Orders: ${mockSalesData.totalOrders}
-Avg Order Value: EGP ${mockSalesData.avgOrderValue}
-Weekly Growth: ${mockSalesData.weeklyGrowth}%
-Abandoned Carts: ${mockSalesData.abandonedCarts}
-Top Products: ${mockSalesData.topProducts.map((p) => `${p.name} (${p.growth > 0 ? "+" : ""}${p.growth}%)`).join(", ")}
-Low Performers: ${mockSalesData.lowProducts.map((p) => `${p.name} (${p.growth}%)`).join(", ")}
+  const competitorSummary = `
+Research these Egyptian fashion competitors fresh and find their current gaps:
+- Tie House (tiehouse.ae) — men only, mass market
+- British House (britishhouse.shop) — premium men shirts only
+- Massimo Dutti Egypt — international luxury, mall only
+Find what they are NOT doing that Debackers can own.
 `;
 
-  const trendsSummary = mockTrends
-    .sort((a, b) => b.trendScore - a.trendScore)
-    .slice(0, 5)
-    .map((t) => `${t.name} (${t.platform}): score ${t.trendScore}, growth ${t.growthRate}%, peaks in ${t.expectedPeakDays} days`)
-    .join("\n");
-
-  const competitorSummary = mockCompetitors
-    .map((c) => `${c.name}: ${c.snapshot?.insights.join(" | ")}`)
-    .join("\n");
-
   const brandContext = `
-Egyptian fashion brand targeting men and women 18-45.
+DEBACKERS EGYPT — Premium casual, semi-casual, formal — Men AND Women
+Belgian heritage since 1986 (40 years)
 Current season: ${seasonalContext.current}
-Seasonal recommendations: ${seasonalContext.recommendations.slice(0, 3).join("; ")}
+Seasonal focus: ${seasonalContext.recommendations.slice(0, 3).join("; ")}
 Upcoming: ${seasonalContext.upcoming.map((u) => `${u.season} in ${u.daysAway} days`).join(", ")}
+Data source: ${salesData.isLive ? "🟢 LIVE Shopify data" : "🔴 Mock data (Shopify not connected)"}
 `;
 
   const input: CampaignGenerationInput = {
@@ -53,11 +48,14 @@ Upcoming: ${seasonalContext.upcoming.map((u) => `${u.season} in ${u.daysAway} da
 
   try {
     const campaigns = await generateMonthlyCampaigns(input);
-    return NextResponse.json({ campaigns });
+    return NextResponse.json({
+      campaigns,
+      dataSource: salesData.isLive ? "live" : "mock",
+    });
   } catch (error) {
     console.error("Campaign generation error:", error);
     return NextResponse.json(
-      { error: "Failed to generate campaigns. Check GEMINI_API_KEY." },
+      { error: "Failed to generate campaigns. Check GROQ_API_KEY in Vercel env vars." },
       { status: 500 }
     );
   }

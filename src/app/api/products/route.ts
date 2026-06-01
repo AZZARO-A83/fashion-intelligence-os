@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const limit = searchParams.get("limit") ?? "50";
 
   try {
-    const url = `https://${SHOPIFY_URL}/admin/api/2024-01/products.json?limit=${limit}&fields=id,title,product_type,variants,images,tags,vendor${type ? `&product_type=${encodeURIComponent(type)}` : ""}`;
+    const url = `https://${SHOPIFY_URL}/admin/api/2025-01/products.json?limit=${limit}&fields=id,title,product_type,variants,images,tags,vendor${type ? `&product_type=${encodeURIComponent(type)}` : ""}`;
 
     const res = await fetch(url, {
       headers: { "X-Shopify-Access-Token": SHOPIFY_TOKEN! },
