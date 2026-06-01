@@ -36,8 +36,8 @@ async function getRealOrders(): Promise<any[]> {
 
   while (keepGoing) {
     const endpoint: string = isFirstPage
-      ? `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status`
-      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status`;
+      ? `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status,refunds`
+      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status,refunds`;
 
     const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
       headers: shopifyHeaders(),
@@ -88,9 +88,8 @@ async function getRealAbandonedCarts(): Promise<{ count: number; totalValue: num
       });
 
       if (!res.ok) {
-        // checkouts requires read_checkouts scope — if 403 use verified dashboard value
-        console.warn("[Shopify] Abandoned carts API failed:", res.status, "— using dashboard value");
-        return { count: 305, totalValue: 488680 }; // verified from Shopify dashboard May 1–Jun 1
+        console.warn("[Shopify] Abandoned carts API failed:", res.status);
+        return { count: 0, totalValue: 0 };
       }
 
       const data = await res.json();
@@ -111,8 +110,7 @@ async function getRealAbandonedCarts(): Promise<{ count: number; totalValue: num
     return { count: allCheckouts.length, totalValue: Math.round(totalValue) };
 
   } catch {
-    // Fallback to verified dashboard values
-    return { count: 305, totalValue: 488680 };
+    return { count: 0, totalValue: 0 };
   }
 }
 
@@ -123,7 +121,20 @@ function processOrders(orders: any[]): Partial<SalesData> & {
 } {
   if (!orders.length) return { weeklyGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
 
-  const totalRevenue = orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
+  // Gross revenue
+  const grossRevenue = orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
+
+  // Subtract refunds to get net revenue (matches Shopify dashboard "Net sales")
+  const totalRefunds = orders.reduce((s: number, o: any) => {
+    const refunds = o.refunds ?? [];
+    const refundTotal = refunds.reduce((rs: number, r: any) => {
+      const refundLineItems = r.refund_line_items ?? [];
+      return rs + refundLineItems.reduce((rls: number, rli: any) => rls + parseFloat(rli.subtotal || 0), 0);
+    }, 0);
+    return s + refundTotal;
+  }, 0);
+
+  const totalRevenue = grossRevenue - totalRefunds;
   const totalOrders = orders.length;
   const avgOrderValue = Math.round(totalRevenue / totalOrders);
 
