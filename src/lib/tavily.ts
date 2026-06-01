@@ -19,6 +19,14 @@ interface TavilyResponse {
 }
 
 // ─── Core search function ─────────────────────────────────────────────
+// Timeout wrapper — never block more than 8 seconds per search
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 export async function tavilySearch(
   query: string,
   options: {
@@ -71,11 +79,13 @@ function formatResults(results: TavilyResult[]): string {
 
 // ─── Specialized searches for Egyptian fashion market ─────────────────
 
+const FALLBACK = { results: [], error: "timeout" };
+
 export async function searchEgyptianFashionTrends(): Promise<string> {
   const searches = await Promise.all([
-    tavilySearch("Egyptian fashion TikTok trends 2026 مصر موضة", { days: 7, maxResults: 4 }),
-    tavilySearch("Egypt Instagram fashion trending hashtags summer 2026", { days: 7, maxResults: 4 }),
-    tavilySearch("Egyptian fashion ecommerce trends June 2026", { days: 14, maxResults: 3 }),
+    withTimeout(tavilySearch("Egyptian fashion TikTok trends 2026 مصر موضة", { days: 7, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egypt Instagram fashion trending hashtags summer 2026", { days: 7, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian fashion ecommerce trends June 2026", { days: 14, maxResults: 3 }), 8000, FALLBACK),
   ]);
 
   return `
@@ -94,10 +104,10 @@ ${formatResults(searches[2].results)}
 
 export async function searchCompetitorActivity(): Promise<string> {
   const searches = await Promise.all([
-    tavilySearch("Tie House Egypt fashion 2026 campaign collection", { days: 30, maxResults: 3 }),
-    tavilySearch("British House Egypt fashion shirts 2026", { days: 30, maxResults: 3 }),
-    tavilySearch("Massimo Dutti Egypt 2026 collection summer", { days: 30, maxResults: 3 }),
-    tavilySearch("Egyptian premium fashion brands 2026 competition", { days: 30, maxResults: 3 }),
+    withTimeout(tavilySearch("Tie House Egypt fashion 2026 campaign collection", { days: 30, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("British House Egypt fashion shirts 2026", { days: 30, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Massimo Dutti Egypt 2026 collection summer", { days: 30, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian premium fashion brands 2026 competition", { days: 30, maxResults: 3 }), 8000, FALLBACK),
   ]);
 
   return `
@@ -119,9 +129,9 @@ ${formatResults(searches[3].results)}
 
 export async function searchEgyptianInfluencers(): Promise<string> {
   const searches = await Promise.all([
-    tavilySearch("Egyptian fashion influencers women TikTok Instagram 2026 مؤثرات موضة مصر", { days: 30, maxResults: 5 }),
-    tavilySearch("Egyptian men fashion influencers TikTok 2026 مؤثرين رجالي مصر", { days: 30, maxResults: 5 }),
-    tavilySearch("top Egyptian fashion content creators 2026 brands collaboration", { days: 30, maxResults: 4 }),
+    withTimeout(tavilySearch("Egyptian fashion influencers women TikTok Instagram 2026 مؤثرات موضة مصر", { days: 30, maxResults: 4 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian men fashion influencers TikTok 2026 مؤثرين رجالي مصر", { days: 30, maxResults: 4 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("top Egyptian fashion content creators 2026 brands collaboration", { days: 30, maxResults: 3 }), 8000, FALLBACK),
   ]);
 
   return `
@@ -140,9 +150,9 @@ ${formatResults(searches[2].results)}
 
 export async function searchMarketIntelligence(): Promise<string> {
   const searches = await Promise.all([
-    tavilySearch("Egyptian fashion ecommerce market summer 2026 consumer behavior", { days: 14, maxResults: 4 }),
-    tavilySearch("Egypt North Coast summer fashion shopping 2026 Sahel", { days: 14, maxResults: 3 }),
-    tavilySearch("Egyptian consumer spending fashion June 2026", { days: 14, maxResults: 3 }),
+    withTimeout(tavilySearch("Egyptian fashion ecommerce market summer 2026 consumer behavior", { days: 14, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egypt North Coast summer fashion shopping 2026 Sahel", { days: 14, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian consumer spending fashion June 2026", { days: 14, maxResults: 3 }), 8000, FALLBACK),
   ]);
 
   return `

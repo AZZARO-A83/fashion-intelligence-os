@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateFlashBrief } from "@/lib/research-engine";
 
+export const maxDuration = 60; // Vercel max 60s for hobby plan
+
 export async function GET() {
   try {
     const brief = await generateFlashBrief();

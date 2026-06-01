@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateWeeklyBrief } from "@/lib/research-engine";
 
+export const maxDuration = 60;
+
 export async function GET() {
   try {
     const brief = await generateWeeklyBrief();
