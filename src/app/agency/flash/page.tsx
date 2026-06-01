@@ -53,7 +53,10 @@ export default function FlashBriefPage() {
       // Step 1 — search the live web
       setStep("searching");
       const researchRes = await fetch("/api/agency/research");
-      if (!researchRes.ok) throw new Error("Web search failed");
+      if (!researchRes.ok) {
+        const errData = await researchRes.json().catch(() => ({}));
+        throw new Error(`Web search failed: ${errData.details || researchRes.status}`);
+      }
       const research = await researchRes.json();
 
       // Step 2 — generate brief using search results
@@ -63,7 +66,10 @@ export default function FlashBriefPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ research }),
       });
-      if (!res.ok) throw new Error("Failed to generate brief");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(`Generation failed: ${errData.details || res.status}`);
+      }
       const data = await res.json();
       setBrief(data.brief);
       setStep("done");
@@ -106,7 +112,11 @@ export default function FlashBriefPage() {
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex gap-3">
           <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
+          <div>
+            <p className="text-sm text-red-400 font-semibold mb-1">Failed — {step === "searching" ? "Web search failed" : "AI generation failed"}</p>
+            <p className="text-xs text-red-300">{error}</p>
+            <p className="text-xs text-muted mt-2">Check: GROQ_API_KEY and TAVILY_API_KEY are set in Vercel env vars</p>
+          </div>
         </div>
       )}
 
