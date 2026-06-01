@@ -9,7 +9,7 @@ export async function GET() {
     const isLive = !!(process.env.SHOPIFY_STORE_URL && process.env.SHOPIFY_ACCESS_TOKEN &&
       process.env.SHOPIFY_ACCESS_TOKEN !== "your_token_here");
 
-    let insights = [];
+    let insights: string[] = [];
     try {
       insights = await analyzeSalesData(salesData);
     } catch {
