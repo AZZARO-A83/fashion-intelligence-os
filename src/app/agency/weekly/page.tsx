@@ -13,16 +13,30 @@ export default function WeeklyReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [step, setStep] = useState<"idle"|"searching"|"generating">("idle");
+
   const generate = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/agency/weekly");
+      setStep("searching");
+      const researchRes = await fetch("/api/agency/research");
+      if (!researchRes.ok) throw new Error("Web search failed");
+      const research = await researchRes.json();
+
+      setStep("generating");
+      const res = await fetch("/api/agency/weekly", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ research }),
+      });
       if (!res.ok) throw new Error("Failed to generate weekly brief");
       const data = await res.json();
       setBrief(data.brief);
+      setStep("idle");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+      setStep("idle");
     } finally {
       setLoading(false);
     }
@@ -77,9 +91,13 @@ export default function WeeklyReportPage() {
         <div className="bg-surface border border-border rounded-xl p-12 text-center">
           <div className="flex items-center justify-center gap-3 mb-4">
             <RefreshCw className="w-6 h-6 text-accent animate-spin" />
-            <p className="text-foreground font-semibold">Building weekly strategy...</p>
+            <p className="text-foreground font-semibold">
+              {step === "searching" ? "Step 1/2 — Searching the live web..." : "Step 2/2 — Building weekly strategy..."}
+            </p>
           </div>
-          <p className="text-sm text-muted">Analyzing market, competitors, and campaign opportunities</p>
+          <p className="text-sm text-muted">
+            {step === "searching" ? "Scanning TikTok trends, competitor pages, influencers..." : "AI analyzing research and generating strategy..."}
+          </p>
         </div>
       )}
 

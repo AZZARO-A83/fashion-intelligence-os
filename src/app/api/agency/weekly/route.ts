@@ -3,12 +3,25 @@ import { generateWeeklyBrief } from "@/lib/research-engine";
 
 export const maxDuration = 60;
 
-export async function GET() {
+export async function POST(request: Request) {
   try {
-    const brief = await generateWeeklyBrief();
+    const body = await request.json().catch(() => ({}));
+    const researchData = body.research ?? null;
+    const brief = await generateWeeklyBrief(researchData);
     return NextResponse.json({ brief, status: "ai-research" });
   } catch (err) {
-    console.error("Weekly brief error:", err);
+    return NextResponse.json(
+      { error: "Failed to generate weekly brief", details: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET() {
+  try {
+    const brief = await generateWeeklyBrief(null);
+    return NextResponse.json({ brief, status: "ai-research" });
+  } catch (err) {
     return NextResponse.json(
       { error: "Failed to generate weekly brief", details: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 }

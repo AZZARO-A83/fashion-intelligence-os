@@ -3,12 +3,25 @@ import { generateMonthlyStrategy } from "@/lib/research-engine";
 
 export const maxDuration = 60;
 
-export async function GET() {
+export async function POST(request: Request) {
   try {
-    const strategy = await generateMonthlyStrategy();
+    const body = await request.json().catch(() => ({}));
+    const researchData = body.research ?? null;
+    const strategy = await generateMonthlyStrategy(researchData);
     return NextResponse.json({ strategy, status: "ai-research" });
   } catch (err) {
-    console.error("Monthly strategy error:", err);
+    return NextResponse.json(
+      { error: "Failed to generate monthly strategy", details: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET() {
+  try {
+    const strategy = await generateMonthlyStrategy(null);
+    return NextResponse.json({ strategy, status: "ai-research" });
+  } catch (err) {
     return NextResponse.json(
       { error: "Failed to generate monthly strategy", details: err instanceof Error ? err.message : "Unknown error" },
       { status: 500 }

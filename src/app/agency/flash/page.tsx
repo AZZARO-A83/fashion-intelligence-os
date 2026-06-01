@@ -42,16 +42,34 @@ export default function FlashBriefPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [step, setStep] = useState<"idle"|"searching"|"generating"|"done">("idle");
+
   const generate = async () => {
     setLoading(true);
     setError(null);
+    setBrief(null);
+
     try {
-      const res = await fetch("/api/agency/flash");
+      // Step 1 — search the live web
+      setStep("searching");
+      const researchRes = await fetch("/api/agency/research");
+      if (!researchRes.ok) throw new Error("Web search failed");
+      const research = await researchRes.json();
+
+      // Step 2 — generate brief using search results
+      setStep("generating");
+      const res = await fetch("/api/agency/flash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ research }),
+      });
       if (!res.ok) throw new Error("Failed to generate brief");
       const data = await res.json();
       setBrief(data.brief);
+      setStep("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+      setStep("idle");
     } finally {
       setLoading(false);
     }
@@ -107,11 +125,30 @@ export default function FlashBriefPage() {
       {/* Loading */}
       {loading && (
         <div className="bg-surface border border-border rounded-xl p-12 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
+          <div className="flex items-center justify-center gap-3 mb-6">
             <RefreshCw className="w-6 h-6 text-accent animate-spin" />
-            <p className="text-foreground font-semibold">Analyzing Egyptian fashion market...</p>
+            <p className="text-foreground font-semibold">
+              {step === "searching" ? "Step 1/2 — Searching the live web..." : "Step 2/2 — Generating your brief..."}
+            </p>
           </div>
-          <p className="text-sm text-muted">Researching trends, competitor moves, and campaign opportunities</p>
+          <div className="flex items-center justify-center gap-4 text-sm">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${step === "searching" ? "bg-accent/20 text-accent" : "bg-green-500/20 text-green-400"}`}>
+              {step === "searching" ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>✓</span>}
+              TikTok trends Egypt
+            </div>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${step === "searching" ? "bg-accent/20 text-accent" : step === "generating" ? "bg-green-500/20 text-green-400" : "bg-surface-2 text-muted"}`}>
+              {step === "searching" ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : step !== "idle" ? <span>✓</span> : null}
+              Competitor pages
+            </div>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${step === "searching" ? "bg-accent/20 text-accent" : step === "generating" ? "bg-green-500/20 text-green-400" : "bg-surface-2 text-muted"}`}>
+              {step === "searching" ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : step !== "idle" ? <span>✓</span> : null}
+              Influencers
+            </div>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${step === "generating" ? "bg-blue-500/20 text-blue-400" : "bg-surface-2 text-muted"}`}>
+              {step === "generating" && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              AI generating
+            </div>
+          </div>
         </div>
       )}
 

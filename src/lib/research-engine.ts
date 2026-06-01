@@ -51,18 +51,28 @@ DEBACKERS STRENGTHS:
 }
 
 // ─── Flash Brief Generator (every 3 days) ────────────────────────────
-export async function generateFlashBrief(): Promise<FlashBrief> {
+export async function generateFlashBrief(preFetchedResearch?: any): Promise<FlashBrief> {
   const context = buildResearchContext();
   const now = new Date();
 
-  // 🔍 Search the live web first — real data before AI generates anything
-  console.log("[Research] Searching live web for flash brief...");
-  const [trends, competitors, influencers, market] = await Promise.all([
-    searchEgyptianFashionTrends(),
-    searchCompetitorActivity(),
-    searchEgyptianInfluencers(),
-    searchMarketIntelligence(),
-  ]);
+  // Use pre-fetched research from Step 1 if available, otherwise search now
+  let trends: string, competitors: string, influencers: string, market: string;
+
+  if (preFetchedResearch) {
+    console.log("[Research] Using pre-fetched research data");
+    trends = preFetchedResearch.trends ?? "No trend data";
+    competitors = preFetchedResearch.competitors ?? "No competitor data";
+    influencers = preFetchedResearch.influencers ?? "No influencer data";
+    market = preFetchedResearch.market ?? "No market data";
+  } else {
+    console.log("[Research] Searching live web for flash brief...");
+    [trends, competitors, influencers, market] = await Promise.all([
+      searchEgyptianFashionTrends(),
+      searchCompetitorActivity(),
+      searchEgyptianInfluencers(),
+      searchMarketIntelligence(),
+    ]);
+  }
 
   const liveResearch = `
 === LIVE WEB RESEARCH (searched right now) ===
@@ -173,16 +183,23 @@ Return ONLY valid JSON in this exact structure:
 }
 
 // ─── Weekly Brief Generator ───────────────────────────────────────────
-export async function generateWeeklyBrief(): Promise<WeeklyBrief> {
+export async function generateWeeklyBrief(preFetchedResearch?: any): Promise<WeeklyBrief> {
   const context = buildResearchContext();
   const now = new Date();
 
-  console.log("[Research] Searching live web for weekly brief...");
-  const [trends, competitors, influencers] = await Promise.all([
-    searchEgyptianFashionTrends(),
-    searchCompetitorActivity(),
-    searchEgyptianInfluencers(),
-  ]);
+  let trends: string, competitors: string, influencers: string;
+
+  if (preFetchedResearch) {
+    trends = preFetchedResearch.trends ?? "No trend data";
+    competitors = preFetchedResearch.competitors ?? "No competitor data";
+    influencers = preFetchedResearch.influencers ?? "No influencer data";
+  } else {
+    [trends, competitors, influencers] = await Promise.all([
+      searchEgyptianFashionTrends(),
+      searchCompetitorActivity(),
+      searchEgyptianInfluencers(),
+    ]);
+  }
 
   const liveResearch = `
 === LIVE WEB RESEARCH (searched right now) ===
@@ -268,17 +285,25 @@ Return ONLY valid JSON:
 }
 
 // ─── Monthly Strategy Generator ──────────────────────────────────────
-export async function generateMonthlyStrategy(): Promise<MonthlyStrategy> {
+export async function generateMonthlyStrategy(preFetchedResearch?: any): Promise<MonthlyStrategy> {
   const context = buildResearchContext();
   const now = new Date();
 
-  console.log("[Research] Searching live web for monthly strategy...");
-  const [trends, competitors, influencers, market] = await Promise.all([
-    searchEgyptianFashionTrends(),
-    searchCompetitorActivity(),
-    searchEgyptianInfluencers(),
-    searchMarketIntelligence(),
-  ]);
+  let trends: string, competitors: string, influencers: string, market: string;
+
+  if (preFetchedResearch) {
+    trends = preFetchedResearch.trends ?? "No trend data";
+    competitors = preFetchedResearch.competitors ?? "No competitor data";
+    influencers = preFetchedResearch.influencers ?? "No influencer data";
+    market = preFetchedResearch.market ?? "No market data";
+  } else {
+    [trends, competitors, influencers, market] = await Promise.all([
+      searchEgyptianFashionTrends(),
+      searchCompetitorActivity(),
+      searchEgyptianInfluencers(),
+      searchMarketIntelligence(),
+    ]);
+  }
 
   const liveResearch = `
 === LIVE WEB RESEARCH (searched right now) ===
