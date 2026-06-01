@@ -7,6 +7,12 @@
 
 import { callGemini } from "./gemini";
 import { buildSystemPrompt, buildDynamicCalendar, EGYPTIAN_CONSUMER_PROFILE } from "./egyptian-context";
+import {
+  searchEgyptianFashionTrends,
+  searchCompetitorActivity,
+  searchEgyptianInfluencers,
+  searchMarketIntelligence,
+} from "./tavily";
 import { FlashBrief, WeeklyBrief, MonthlyStrategy } from "@/types";
 
 // ─── Context builder ──────────────────────────────────────────────────
@@ -49,12 +55,37 @@ export async function generateFlashBrief(): Promise<FlashBrief> {
   const context = buildResearchContext();
   const now = new Date();
 
+  // 🔍 Search the live web first — real data before AI generates anything
+  console.log("[Research] Searching live web for flash brief...");
+  const [trends, competitors, influencers, market] = await Promise.all([
+    searchEgyptianFashionTrends(),
+    searchCompetitorActivity(),
+    searchEgyptianInfluencers(),
+    searchMarketIntelligence(),
+  ]);
+
+  const liveResearch = `
+=== LIVE WEB RESEARCH (searched right now) ===
+
+${trends}
+
+${competitors}
+
+${influencers}
+
+${market}
+
+=== END LIVE RESEARCH ===
+`;
+
   const prompt = `
 You are a senior marketing research analyst. Generate a Flash Market Brief for DEBACKERS Egypt.
 This brief is used by: Marketing Team + Content Creators.
 It covers the next 3 days of marketing activity.
 
 ${context}
+
+${liveResearch}
 
 Research and generate a FLASH BRIEF with:
 1. MARKET PULSE — 2-sentence summary of what's happening in Egyptian fashion RIGHT NOW
@@ -145,6 +176,21 @@ Return ONLY valid JSON in this exact structure:
 export async function generateWeeklyBrief(): Promise<WeeklyBrief> {
   const context = buildResearchContext();
   const now = new Date();
+
+  console.log("[Research] Searching live web for weekly brief...");
+  const [trends, competitors, influencers] = await Promise.all([
+    searchEgyptianFashionTrends(),
+    searchCompetitorActivity(),
+    searchEgyptianInfluencers(),
+  ]);
+
+  const liveResearch = `
+=== LIVE WEB RESEARCH (searched right now) ===
+${trends}
+${competitors}
+${influencers}
+=== END LIVE RESEARCH ===
+`;
   const weekOf = now.toLocaleDateString("en-EG", { month: "long", day: "numeric", year: "numeric" });
 
   const prompt = `
@@ -153,6 +199,8 @@ Audience: Management + Marketing Team.
 Covers: Full week strategy, competitor watch, content calendar, KPI targets.
 
 ${context}
+
+${liveResearch}
 
 Generate a comprehensive weekly brief covering:
 1. EXECUTIVE SUMMARY — What's the big picture this week (2-3 sentences)
@@ -223,6 +271,23 @@ Return ONLY valid JSON:
 export async function generateMonthlyStrategy(): Promise<MonthlyStrategy> {
   const context = buildResearchContext();
   const now = new Date();
+
+  console.log("[Research] Searching live web for monthly strategy...");
+  const [trends, competitors, influencers, market] = await Promise.all([
+    searchEgyptianFashionTrends(),
+    searchCompetitorActivity(),
+    searchEgyptianInfluencers(),
+    searchMarketIntelligence(),
+  ]);
+
+  const liveResearch = `
+=== LIVE WEB RESEARCH (searched right now) ===
+${trends}
+${competitors}
+${influencers}
+${market}
+=== END LIVE RESEARCH ===
+`;
   const month = now.toLocaleDateString("en-EG", { month: "long", year: "numeric" });
 
   const prompt = `
@@ -231,6 +296,8 @@ Audience: Management — strategic decisions, budget, direction.
 Covers: Full month strategy, market analysis, campaign calendar, budget guidance, KPI forecast.
 
 ${context}
+
+${liveResearch}
 
 Generate a full monthly strategy:
 1. EXECUTIVE SUMMARY — State of the market + big opportunity this month
