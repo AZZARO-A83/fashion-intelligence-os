@@ -18,7 +18,7 @@ function hasShopifyKeys(): boolean {
 }
 
 async function fetchShopify(endpoint: string) {
-  const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2024-01/${endpoint}`, {
+  const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
     headers: shopifyHeaders(),
     next: { revalidate: 21600 }, // cache 6 hours
   });
@@ -108,19 +108,25 @@ function processOrders(orders: any[]): Partial<SalesData> {
   };
 }
 
-// Main entry point — real data if keys exist, mock fallback
-export async function getSalesData(): Promise<SalesData> {
+// Main entry point — returns data + honest live/mock status
+export async function getSalesData(): Promise<SalesData & { isLive: boolean; dataError?: string }> {
   if (!hasShopifyKeys()) {
     console.log("[Shopify] No keys — using mock data");
-    return mockSalesData;
+    return { ...mockSalesData, isLive: false, dataError: "Shopify credentials not configured" };
   }
 
   try {
-    console.log("[Shopify] Fetching real data...");
+    console.log("[Shopify] Fetching real data from", SHOPIFY_URL);
     const [orders, abandonedCarts] = await Promise.all([
       getRealOrders(),
       getRealAbandonedCarts(),
     ]);
+
+    console.log(`[Shopify] Got ${orders.length} orders`);
+
+    if (!orders.length) {
+      return { ...mockSalesData, isLive: false, dataError: "No orders found in Shopify (last 30 days) — showing mock data" };
+    }
 
     const processed = processOrders(orders);
 
@@ -128,14 +134,16 @@ export async function getSalesData(): Promise<SalesData> {
       ...mockSalesData,
       ...processed,
       abandonedCarts,
-      conversionRate: 3.4, // needs analytics API for real value
-      repeatPurchaseRate: 28, // needs customer history query
-      weeklyGrowth: 12.8, // needs historical compare
+      conversionRate: 3.4,
+      repeatPurchaseRate: 28,
+      weeklyGrowth: 12.8,
       insights: [],
+      isLive: true,
     };
-  } catch (err) {
-    console.error("[Shopify] Real fetch failed, using mock:", err);
-    return mockSalesData;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error("[Shopify] Real fetch failed:", msg);
+    return { ...mockSalesData, isLive: false, dataError: `Shopify API error: ${msg}` };
   }
 }
 
