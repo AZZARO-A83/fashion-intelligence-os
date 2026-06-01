@@ -157,6 +157,97 @@ export interface DashboardStats {
   trendScore: number;
 }
 
+// ─── Agency Intelligence ─────────────────────────────────────────────
+export interface ResearchTrend {
+  name: string;
+  platform: string;
+  why: string;
+  howToUse: string;
+  urgency: "high" | "medium" | "low";
+  hashtags: string[];
+}
+
+export interface CampaignIdea {
+  name: string;
+  objective: string;
+  audience: string;
+  hook_ar: string;
+  hook_en: string;
+  format: string;
+  timing: string;
+  confidence: number;
+  whyNow: string;
+}
+
+export interface CompetitorMove {
+  competitor: string;
+  observation: string;
+  gap: string;
+  action: string;
+}
+
+export interface FlashBrief {
+  generatedAt: string;
+  period: string;
+  season: string;
+  dataSource: "ai-research";
+  marketPulse: string;
+  trends: ResearchTrend[];
+  hooks: string[];
+  campaignIdeas: CampaignIdea[];
+  competitorMoves: CompetitorMove[];
+  urgentActions: string[];
+  forCreators: {
+    readyHooks: string[];
+    captionFormulas: string[];
+    hashtagSets: string[][];
+    visualDirections: string[];
+  };
+}
+
+export interface WeeklyBrief {
+  generatedAt: string;
+  weekOf: string;
+  executiveSummary: string;
+  topOpportunities: string[];
+  campaigns: CampaignIdea[];
+  competitorWatch: CompetitorMove[];
+  contentPlan: {
+    day: string;
+    platform: string;
+    format: string;
+    topic: string;
+    hook: string;
+  }[];
+  kpiTargets: {
+    metric: string;
+    target: string;
+    rationale: string;
+  }[];
+}
+
+export interface MonthlyStrategy {
+  generatedAt: string;
+  month: string;
+  executiveSummary: string;
+  marketAnalysis: string;
+  seasonalStrategy: string;
+  campaignCalendar: {
+    week: string;
+    focus: string;
+    campaigns: string[];
+    platforms: string[];
+  }[];
+  budgetRecommendation: string;
+  competitorStrategy: string;
+  kpiForecast: {
+    metric: string;
+    forecast: string;
+    basis: string;
+  }[];
+  metaAdsNote: string;
+}
+
 // ─── Egyptian Seasonal Context ───────────────────────────────────────
 export type EgyptianSeason =
   | "ramadan"
