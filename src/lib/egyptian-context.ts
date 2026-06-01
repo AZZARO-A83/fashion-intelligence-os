@@ -223,43 +223,98 @@ MARKET SIZE CONTEXT:
 - Local brand advantage: 40% pound devaluation made imports expensive
 `;
 
-// ─── VERIFIED Seasonal Calendar 2026 ─────────────────────────────────
-export const SEASONAL_CALENDAR_2026 = `
-VERIFIED 2026 EGYPT SEASONAL CALENDAR (as of May 31, 2026):
+// ─── Dynamic Seasonal Calendar — always current ──────────────────────
+// Calculates based on TODAY's real date, never goes stale
+export function buildDynamicCalendar(): string {
+  const now = new Date();
+  const today = now.toLocaleDateString("en-EG", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const month = now.getMonth() + 1; // 1-12
+  const year = now.getFullYear();
 
-PASSED:
-- Ramadan 2026: Feb 18 – Mar 19 (PASSED)
-- Eid Al-Fitr 2026: Mar 19–23 (PASSED)
-- Wedding Season Spring: April–May (JUST ENDED)
-- Eid Al-Adha 2026: May 27 (PASSED — 4 days ago)
+  // Islamic calendar anchor dates (Egypt confirmed)
+  const events: { name: string; date: Date; passed: boolean }[] = [
+    { name: "Ramadan 2026 starts",    date: new Date(2026, 1, 18), passed: now > new Date(2026, 1, 18) },
+    { name: "Eid Al-Fitr 2026",       date: new Date(2026, 2, 19), passed: now > new Date(2026, 2, 19) },
+    { name: "Wedding Season Spring",  date: new Date(2026, 3, 1),  passed: now > new Date(2026, 4, 31) },
+    { name: "Eid Al-Adha 2026",       date: new Date(2026, 4, 27), passed: now > new Date(2026, 4, 27) },
+    { name: "North Coast Season",     date: new Date(2026, 5, 1),  passed: false },
+    { name: "Back to School",         date: new Date(2026, 8, 1),  passed: now > new Date(2026, 8, 1) },
+    { name: "Wedding Season Fall",    date: new Date(2026, 9, 1),  passed: now > new Date(2026, 10, 30) },
+    { name: "Black Friday 2026",      date: new Date(2026, 10, 28),passed: now > new Date(2026, 10, 28) },
+    { name: "Ramadan 2027 starts",    date: new Date(2027, 0, 28), passed: false },
+  ];
 
-CURRENT & UPCOMING:
-- Summer / North Coast Season: June–September (STARTING NOW)
-  → Peak: July–August (North Coast / Sahel migration for Cairo residents)
-  → Temperature: 35–42°C Cairo, 28–32°C North Coast
-  → Key fashion: linen, breathable premium cotton, bamboo blends, resort wear
+  // Current season detection
+  const seasonMap: Record<number, string> = {
+    1: "Winter",
+    2: "Ramadan Season",
+    3: "Eid Al-Fitr Season",
+    4: "Wedding Season (Spring)",
+    5: "Wedding Season + Post-Eid",
+    6: "Summer / North Coast Peak",
+    7: "Summer / North Coast Peak",
+    8: "Summer / North Coast Peak",
+    9: "Back to School",
+    10: "Wedding Season (Fall)",
+    11: "Black Friday Season",
+    12: "Winter",
+  };
+  const currentSeason = seasonMap[month] || "Normal Season";
 
-- Back to School / University: September 2026
-  → Schools: ~Sep 1-5, Universities: ~Sep 20–Oct 1
-  → Target: 18–24 university students, smart casual everyday wear
+  // Days until upcoming events
+  const upcoming = events
+    .filter(e => !e.passed && e.date > now)
+    .map(e => {
+      const days = Math.round((e.date.getTime() - now.getTime()) / 86400000);
+      return `- ${e.name}: ${days} days away (${e.date.toLocaleDateString("en-EG", { month: "long", day: "numeric", year: "numeric" })})`;
+    })
+    .slice(0, 5)
+    .join("\n");
 
-- Wedding Season Fall: October–November
-  → Heavy formal + semi-formal demand
+  const passed = events
+    .filter(e => e.passed)
+    .map(e => `- ${e.name} (PASSED)`)
+    .join("\n");
 
-- Black Friday: November 28, 2026
-  → Growing fast in Egypt — start pre-buzz November 14
+  return `
+EGYPT SEASONAL CALENDAR — LIVE (Today: ${today})
 
-- Winter: December 2026 – February 2027
-- Ramadan 2027: ~Jan 28, 2027 (EARLIER THAN 2026 — prepare in November 2026)
+CURRENT SEASON: ${currentSeason}
+
+PASSED THIS YEAR:
+${passed || "None yet"}
+
+UPCOMING (next 5 events):
+${upcoming || "All major events passed for this year"}
+
+SEASONAL FASHION FOCUS RIGHT NOW:
+${month >= 6 && month <= 8 ? "🔥 PEAK SUMMER — Push linen, breathable premium cotton, resort wear, North Coast essentials. Target Cairo elite heading to Sahel." : ""}
+${month === 9 ? "📚 BACK TO SCHOOL — Smart casual for university students 18-24. Push affordable-luxury bundles." : ""}
+${month === 10 || month === 11 && now.getDate() < 15 ? "💍 WEDDING SEASON FALL — Formal + semi-formal guest attire. High search intent for suits, blazers, elegant sets." : ""}
+${month === 11 && now.getDate() >= 15 ? "🛍 BLACK FRIDAY APPROACHING — Start teasing now. Flash deals. Email VIP early access." : ""}
+${month === 12 || month === 1 ? "❄️ WINTER — Core bestsellers, loyalty campaigns. Prepare for Ramadan (coming soon)." : ""}
+${month === 2 ? "🌙 RAMADAN SEASON — Modest elegant fashion, Iftar outfits, evening engagement peaks 8-11pm." : ""}
+${month === 3 ? "🎊 EID AL-FITR — Formal + semi-formal, gift bundles, family coordination looks." : ""}
+${month === 4 || month === 5 ? "💒 WEDDING SEASON SPRING — Formal guest attire, suits, blazers, women's elegant sets." : ""}
+
+POSTING STRATEGY NOW:
+- Best posting time: 8pm–11pm Egypt time (post-dinner browsing peak)
+- Best posting days: Thursday + Friday (48% of weekly orders)
+- Best purchase push dates: 25th–30th of month (salary receipt period)
 `;
+}
 
-// ─── System Prompt for AI ─────────────────────────────────────────────
-export const EGYPTIAN_FASHION_SYSTEM_PROMPT = `
+// Keep export for backward compatibility — now dynamic
+export const SEASONAL_CALENDAR_2026 = buildDynamicCalendar();
+
+// ─── System Prompt builder — always fresh ────────────────────────────
+export function buildSystemPrompt(): string {
+  return `
 You are an expert AI marketing strategist specialized exclusively in Egyptian fashion e-commerce.
 
 BRAND: DEBACKERS EGYPT
 Positioning: Premium Casual, Semi-Casual & Formal Fashion for Men & Women
-Price range: EGP 800–5,000 | Stores: 13 branches, 7 governorates
+Price range: EGP 800–5,000
 Website: de-backers.com | Instagram: @de_backers | Facebook: @Debackers.egy
 Founded: 1986 (Belgian family, 40 years of fashion heritage)
 
@@ -270,7 +325,7 @@ premium chinos, women's elegant sets, dresses, formal blouses.
 
 ${EGYPTIAN_CONSUMER_PROFILE}
 
-${SEASONAL_CALENDAR_2026}
+${buildDynamicCalendar()}
 
 CONTENT RULES FOR EGYPTIAN AUDIENCE:
 1. Egyptian Arabic (colloquial/عامية) resonates far better than Modern Standard Arabic
@@ -282,15 +337,35 @@ CONTENT RULES FOR EGYPTIAN AUDIENCE:
 7. Salary timing: post content near 25th-30th of month for purchase campaigns
 8. Evening posting: 8pm–11pm gets 2-3x higher engagement than morning
 
-COMPETITORS (Debackers vs):
-- Tie House: Men ONLY, mass market, heavy discounting, 96 branches, $319.6M revenue
-- British House: Men shirts ONLY, EGP 2,345–3,545/shirt, very niche, 3 premium locations
-- Massimo Dutti: International luxury, mall-only, no Arabic content, out of reach for most Egyptians
-→ DEBACKERS ADVANTAGE: Only brand offering full men + women premium wardrobe at accessible price
+COMPETITOR RESEARCH INSTRUCTIONS:
+You must research competitors yourself based on your knowledge of the Egyptian fashion market.
+Do NOT rely on hardcoded data — research these brands fresh each time:
+- Tie House (tiehouse.ae) — Egyptian men's fashion chain
+- British House (britishhouse.shop) — premium men's shirts Egypt
+- Massimo Dutti Egypt — international luxury brand
+- Any other Egyptian fashion brands you know about (Concrete, Moschino Egypt, Beymen, etc.)
+
+For each competitor, analyze:
+1. What they are currently selling / promoting
+2. What content formats they use (TikTok, Reels, etc.)
+3. Their pricing vs Debackers
+4. The GAP they are leaving open that Debackers can take
+5. Their target audience vs Debackers audience
+
+DEBACKERS PERMANENT ADVANTAGE:
+- Only premium Egyptian brand with BOTH men AND women full wardrobe
+- Belgian heritage since 1986 — 40 years quality story (unique in Egypt)
+- Local brand pricing advantage — EGP devaluation made imports expensive
+- Widest premium reach: multiple governorates
 
 CAMPAIGN LOGIC:
 - Never generate campaigns without specific data justification
-- Always cite Shopify sales data, trend scores, and competitor gaps
-- Confidence score = 0–100 based on: sales signal strength + trend momentum + competitor gap size
-- Prioritize women's segment — NO competitor owns this space in premium Egyptian fashion
+- Always cite trend signals and competitor gaps
+- Confidence score = 0–100 based on: trend momentum + competitor gap size + seasonal timing
+- ALWAYS prioritize women's segment — no competitor fully owns this space
+- Research what competitors are doing RIGHT NOW and find what they are NOT doing
 `;
+}
+
+// Keep static export for backward compatibility — now calls dynamic builder
+export const EGYPTIAN_FASHION_SYSTEM_PROMPT = buildSystemPrompt();

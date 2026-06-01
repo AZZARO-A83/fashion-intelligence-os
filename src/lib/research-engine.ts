@@ -6,7 +6,7 @@
 //         🔴 MOCK = placeholder, not yet connected
 
 import { callGemini } from "./gemini";
-import { EGYPTIAN_FASHION_SYSTEM_PROMPT, SEASONAL_CALENDAR_2026, EGYPTIAN_CONSUMER_PROFILE } from "./egyptian-context";
+import { buildSystemPrompt, buildDynamicCalendar, EGYPTIAN_CONSUMER_PROFILE } from "./egyptian-context";
 import { FlashBrief, WeeklyBrief, MonthlyStrategy } from "@/types";
 
 // ─── Context builder ──────────────────────────────────────────────────
@@ -18,25 +18,29 @@ function buildResearchContext(): string {
 
   return `
 TODAY: ${dateStr}
-CURRENT SEASON: Summer 2026 — North Coast season JUST OPENED (June 1)
 BRAND: DEBACKERS EGYPT — Premium casual, semi-casual, formal — Men & Women
 POSITIONING: Only Egyptian brand with full men + women premium wardrobe
 
 VERIFIED MARKET CONTEXT:
 ${EGYPTIAN_CONSUMER_PROFILE}
-${SEASONAL_CALENDAR_2026}
 
-COMPETITORS RIGHT NOW:
-- Tie House: 96 branches, men only, heavy discounting, celebrity endorsements — THEY OWN VOLUME
-- British House: Premium linen shirts men only, EGP 2,345–3,545, very niche — THEY OWN PREMIUM NICHE
-- Massimo Dutti: International luxury, mall-only, no Arabic content — THEY OWN ASPIRATIONAL
-→ THE GAP: No competitor owns premium women's fashion + smart casual for both genders + Egyptian cultural connection
+${buildDynamicCalendar()}
 
-DEBACKERS CURRENT STRENGTHS:
-- 13 branches, 7 governorates (widest reach of premium local brands)
-- Belgian heritage since 1986 (40 years quality story)
-- Both men AND women (unique positioning)
-- Price accessible vs imports (40% EGP devaluation helps local brands)
+COMPETITOR RESEARCH TASK:
+Research the following Egyptian fashion competitors using your current knowledge.
+Do NOT use outdated or hardcoded data — research them fresh:
+- Tie House (tiehouse.ae) — men's fashion chain Egypt
+- British House (britishhouse.shop) — premium men's shirts
+- Massimo Dutti Egypt — international luxury
+- Any other premium Egyptian fashion brands active right now
+
+For each: what are they currently doing? What gap are they leaving? How does Debackers win?
+
+DEBACKERS STRENGTHS:
+- Belgian heritage since 1986 (40 years — unique story in Egypt)
+- Both men AND women full wardrobe (no competitor matches this)
+- Price advantage vs imports (EGP devaluation makes local brands cheaper)
+- Multiple governorates coverage
 `;
 }
 
@@ -121,7 +125,7 @@ Return ONLY valid JSON in this exact structure:
   }
 }`;
 
-  const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 4000);
+  const text = await callGemini(buildSystemPrompt(), prompt, 4000);
 
   try {
     const data = JSON.parse(text);
@@ -201,7 +205,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 5000);
+  const text = await callGemini(buildSystemPrompt(), prompt, 5000);
 
   try {
     const data = JSON.parse(text);
@@ -263,7 +267,7 @@ Return ONLY valid JSON:
   "metaAdsNote": "Meta Ads integration coming soon — this section will auto-populate with real campaign performance, spend efficiency, ROAS, and audience data once connected."
 }`;
 
-  const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 6000);
+  const text = await callGemini(buildSystemPrompt(), prompt, 6000);
 
   try {
     const data = JSON.parse(text);
