@@ -26,13 +26,41 @@ async function fetchShopify(endpoint: string) {
   return res.json();
 }
 
-// Pull real orders from Shopify (last 30 days)
-async function getRealOrders() {
+// Pull ALL orders from Shopify (last 30 days) with pagination
+async function getRealOrders(): Promise<any[]> {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const data = await fetchShopify(
-    `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status`
-  );
-  return data.orders ?? [];
+  const allOrders: any[] = [];
+  let pageInfo: string | null = null;
+  let isFirstPage = true;
+  let keepGoing = true;
+
+  while (keepGoing) {
+    const endpoint: string = isFirstPage
+      ? `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status`
+      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status`;
+
+    const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
+      headers: shopifyHeaders(),
+    });
+
+    if (!res.ok) throw new Error(`Shopify orders failed: ${res.status}`);
+
+    const data = await res.json();
+    const orders: any[] = data.orders ?? [];
+    allOrders.push(...orders);
+
+    const linkHeader = res.headers.get("Link") ?? "";
+    const nextMatch = linkHeader.match(/<[^>]*page_info=([^>&"]+)[^>]*>;\s*rel="next"/);
+    if (nextMatch && orders.length === 250) {
+      pageInfo = nextMatch[1];
+      isFirstPage = false;
+    } else {
+      keepGoing = false;
+    }
+  }
+
+  console.log(`[Shopify] Fetched ${allOrders.length} total orders`);
+  return allOrders;
 }
 
 // Pull real products
