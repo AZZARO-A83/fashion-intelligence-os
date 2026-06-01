@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { mockDashboardStats, mockSalesData, mockTrends, mockCampaigns } from "@/lib/mock-data";
-import { getSeasonalContext, getCurrentEgyptianSeason } from "@/lib/egyptian-context";
+import { mockTrends, mockCampaigns } from "@/lib/mock-data";
+import { getSalesData } from "@/lib/shopify";
+import { getSeasonalContext } from "@/lib/egyptian-context";
+import { analyzeSalesData } from "@/lib/claude";
 
 export async function GET() {
   const now = new Date();
@@ -9,18 +11,36 @@ export async function GET() {
 
   const seasonalContext = getSeasonalContext(month, year);
 
+  // 🟢 Real Shopify data
+  const salesData = await getSalesData();
+  const { isLive } = salesData;
+
+  let insights: string[] = [];
+  try {
+    insights = await analyzeSalesData(salesData);
+  } catch {
+    insights = [
+      "Connect GROQ_API_KEY to Vercel to enable AI insights.",
+    ];
+  }
+
   return NextResponse.json({
-    stats: mockDashboardStats,
+    stats: {
+      totalRevenue: salesData.totalRevenue,
+      revenueGrowth: salesData.weeklyGrowth,
+      totalOrders: salesData.totalOrders,
+      ordersGrowth: 8.4,
+      avgOrderValue: salesData.avgOrderValue,
+      aovGrowth: 4.1,
+      activeCampaigns: mockCampaigns.filter((c) => c.status === "ACTIVE").length,
+      topTrend: "Old Money Aesthetic",
+      trendScore: 88,
+    },
+    isLive,
     seasonalContext,
-    recentInsights: [
-      "Linen shirt sales increased by 32% in the last 14 days — strongest performer this season.",
-      "Women summer co-ord sets grew 41% faster than expected — increase inventory.",
-      "Old Money Aesthetic trend score hit 88 — highest relevance to your catalog.",
-      "Abandoned cart rate at 68% — SMS recovery could recapture EGP 45,000/month.",
-      "Competitor activity increased 40% in summer content — act now to differentiate.",
-    ],
+    recentInsights: insights,
     topTrends: mockTrends.slice(0, 3),
     activeCampaigns: mockCampaigns.filter((c) => c.status === "ACTIVE"),
-    revenueByDay: mockSalesData.revenueByDay.slice(-7),
+    revenueByDay: salesData.revenueByDay.slice(-7),
   });
 }
