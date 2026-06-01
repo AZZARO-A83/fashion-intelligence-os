@@ -38,8 +38,15 @@ export async function callClaude(
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[Claude API] Failed:", msg);
-    // Do NOT fall back to Groq — throw so the user sees the real error
-    throw new Error(`Claude API error: ${msg}`);
+    console.error("[Claude API] Failed, trying Groq fallback:", msg);
+
+    // Try Groq as fallback
+    try {
+      console.log("[Claude API] Falling back to Groq...");
+      return await callGemini(systemPrompt, userPrompt, maxTokens);
+    } catch (groqErr) {
+      const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+      throw new Error(`Both Claude and Groq failed. Claude: ${msg} | Groq: ${groqMsg}`);
+    }
   }
 }
