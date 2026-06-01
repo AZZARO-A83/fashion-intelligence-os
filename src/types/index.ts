@@ -23,6 +23,7 @@ export interface SalesData {
   weeklyGrowth: number;
   repeatPurchaseRate: number;
   abandonedCarts: number;
+  recoveryOpportunity?: number;
   topProducts: TopProduct[];
   lowProducts: TopProduct[];
   insights: SalesInsight[];
