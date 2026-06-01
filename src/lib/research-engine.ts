@@ -5,7 +5,7 @@
 //         🟢 LIVE = from real API (Shopify)
 //         🔴 MOCK = placeholder, not yet connected
 
-import { callGemini } from "./gemini";
+import { callClaude } from "./claude-api";
 import { buildSystemPrompt, buildDynamicCalendar, EGYPTIAN_CONSUMER_PROFILE } from "./egyptian-context";
 import {
   searchEgyptianFashionTrends,
@@ -166,7 +166,7 @@ Return ONLY valid JSON in this exact structure:
   }
 }`;
 
-  const text = await callGemini(buildSystemPrompt(), prompt, 4000);
+  const text = await callClaude(buildSystemPrompt(), prompt, 4000);
 
   try {
     const data = JSON.parse(text);
@@ -270,7 +270,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const text = await callGemini(buildSystemPrompt(), prompt, 5000);
+  const text = await callClaude(buildSystemPrompt(), prompt, 5000);
 
   try {
     const data = JSON.parse(text);
@@ -359,7 +359,7 @@ Return ONLY valid JSON:
   "metaAdsNote": "Meta Ads integration coming soon — this section will auto-populate with real campaign performance, spend efficiency, ROAS, and audience data once connected."
 }`;
 
-  const text = await callGemini(buildSystemPrompt(), prompt, 6000);
+  const text = await callClaude(buildSystemPrompt(), prompt, 6000);
 
   try {
     const data = JSON.parse(text);
