@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { cn, timeAgo } from "@/lib/utils";
 import { CompetitorIntelligence } from "@/lib/competitor-intelligence";
 import { GenerationError } from "@/components/ui/generation-error";
+import { Sources, type Source } from "@/components/ui/sources";
 import {
   ExternalLink, TrendingUp, Users,
   Eye, Instagram, Globe,
@@ -207,6 +208,7 @@ function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) 
 
 export default function CompetitorsPage() {
   const [data, setData] = useState<{ competitors: CompetitorIntelligence[]; marketGaps: string[] } | null>(null);
+  const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -215,7 +217,7 @@ export default function CompetitorsPage() {
     fetch("/api/competitors")
       .then((r) => r.json())
       .then((d) => {
-        if (d.competitors?.length) { setData(d); setGeneratedAt(d.generatedAt); }
+        if (d.competitors?.length) { setData(d); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); }
       })
       .catch(() => {});
   }, []);
@@ -231,6 +233,7 @@ export default function CompetitorsPage() {
       }
       const d = await res.json();
       setData(d);
+      setSources(d.sources ?? []);
       setGeneratedAt(d.generatedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -264,6 +267,8 @@ export default function CompetitorsPage() {
         {generatedAt && (
           <p className="text-xs text-muted">🔄 Last researched {timeAgo(generatedAt)} · live web search · shared with your team</p>
         )}
+
+        {competitors.length > 0 && <Sources sources={sources} />}
 
         {error && <GenerationError error={error} />}
 

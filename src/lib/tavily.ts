@@ -91,6 +91,38 @@ function formatResults(results: TavilyResult[]): string {
     .join("\n\n");
 }
 
+// ─── Source collection (for credibility / verification) ──────────────
+// Returns the REAL web sources behind a research run so the user can click
+// and verify every claim. Empty array means the live search returned nothing
+// (e.g. TAVILY_API_KEY missing) — the UI must then NOT claim "live".
+export interface Source {
+  title: string;
+  url: string;
+  date?: string;
+  score?: number;
+}
+
+export async function collectSources(
+  queries: { q: string; days?: number }[]
+): Promise<Source[]> {
+  const runs = await Promise.all(
+    queries.map(({ q, days }) =>
+      withTimeout(tavilySearch(q, { days: days ?? 14, maxResults: 4 }), 8000, FALLBACK))
+  );
+  const seen = new Set<string>();
+  const sources: Source[] = [];
+  for (const r of runs) {
+    for (const x of r.results ?? []) {
+      if (x.url && !seen.has(x.url)) {
+        seen.add(x.url);
+        sources.push({ title: x.title, url: x.url, date: x.published_date, score: x.score });
+      }
+    }
+  }
+  // Strongest signals first
+  return sources.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+}
+
 // ─── Specialized searches for Egyptian fashion market ─────────────────
 
 const FALLBACK = { results: [], error: "timeout" };

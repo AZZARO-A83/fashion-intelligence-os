@@ -4,12 +4,13 @@ import { getCachedReport, setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
 export const maxDuration = 60;
 
-// GET — return last live-generated competitor intel (cached, no tokens).
+// GET — return last live-generated competitor intel + sources (cached, no tokens).
 export async function GET() {
-  const cached = await getCachedReport<{ competitors: unknown[]; marketGaps: string[] }>(CACHE_KEYS.competitors);
+  const cached = await getCachedReport<{ competitors: unknown[]; marketGaps: string[]; sources: unknown[] }>(CACHE_KEYS.competitors);
   return NextResponse.json({
     competitors: cached?.data?.competitors ?? [],
     marketGaps: cached?.data?.marketGaps ?? [],
+    sources: cached?.data?.sources ?? [],
     generatedAt: cached?.generatedAt ?? null,
   });
 }

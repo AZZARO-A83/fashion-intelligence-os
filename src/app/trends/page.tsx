@@ -6,6 +6,7 @@ import { ScoreRing } from "@/components/ui/score-ring";
 import { Badge } from "@/components/ui/badge";
 import { RichTrend, TrendSignal } from "@/lib/trend-engine";
 import { GenerationError } from "@/components/ui/generation-error";
+import { Sources, type Source } from "@/components/ui/sources";
 import { cn, platformIcon, platformColor, timeAgo } from "@/lib/utils";
 import {
   TrendingUp, Clock, Hash, Music, ChevronDown, ChevronRight,
@@ -240,16 +241,17 @@ function TrendCard({ trend }: { trend: RichTrend }) {
 export default function TrendsPage() {
   const [filter, setFilter] = useState<string>("all");
   const [trends, setTrends] = useState<RichTrend[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
-  // Load the last live-generated trends (shared, no tokens).
+  // Load the last live-generated trends + sources (shared, no tokens).
   useEffect(() => {
     fetch("/api/trends")
       .then((r) => r.json())
       .then((d) => {
-        if (d.trends?.length) { setTrends(d.trends); setGeneratedAt(d.generatedAt); }
+        if (d.trends?.length) { setTrends(d.trends); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); }
       })
       .catch(() => {});
   }, []);
@@ -265,6 +267,7 @@ export default function TrendsPage() {
       }
       const d = await res.json();
       setTrends(d.trends);
+      setSources(d.sources ?? []);
       setGeneratedAt(d.generatedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -304,6 +307,8 @@ export default function TrendsPage() {
         {generatedAt && (
           <p className="text-xs text-muted">🔄 Last scanned {timeAgo(generatedAt)} · live web search · shared with your team</p>
         )}
+
+        {trends.length > 0 && <Sources sources={sources} />}
 
         {error && <GenerationError error={error} />}
 

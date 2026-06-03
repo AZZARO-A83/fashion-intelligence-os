@@ -10,8 +10,12 @@ import {
   searchCompetitorActivity,
   searchEgyptianInfluencers,
   searchMarketIntelligence,
+  collectSources,
+  Source,
 } from "./tavily";
 import { RichTrend } from "./trend-engine";
+
+export type { Source };
 
 function parseJson<T>(text: string): T {
   // Strip code fences / stray prose, grab the outermost JSON.
@@ -23,10 +27,20 @@ function parseJson<T>(text: string): T {
 }
 
 // ─── LIVE TRENDS ──────────────────────────────────────────────────────
-export async function generateLiveTrends(): Promise<RichTrend[]> {
-  const [trends, influencers] = await Promise.all([
+export interface LiveTrendsResult {
+  trends: RichTrend[];
+  sources: Source[];
+}
+
+export async function generateLiveTrends(): Promise<LiveTrendsResult> {
+  const [trends, influencers, sources] = await Promise.all([
     searchEgyptianFashionTrends(),
     searchEgyptianInfluencers(),
+    collectSources([
+      { q: "Egyptian fashion TikTok trends 2026 مصر موضة", days: 14 },
+      { q: "Egypt Instagram fashion trending hashtags 2026", days: 14 },
+      { q: "Egyptian fashion influencers 2026 مؤثرات موضة مصر", days: 30 },
+    ]),
   ]);
 
   const prompt = `You are a fashion trend analyst for DEBACKERS Egypt (premium men+women fashion).
@@ -63,7 +77,7 @@ Base scores on the real search signals. Use Egyptian Arabic for hooks. Return ON
 
   const text = await callClaude(buildSystemPrompt(), prompt, 4500);
   const raw = parseJson<any[]>(text);
-  return raw.map((t, i) => normalizeTrend(t, i));
+  return { trends: raw.map((t, i) => normalizeTrend(t, i)), sources };
 }
 
 // Fill any fields the model omitted so the UI never crashes on undefined.
@@ -111,10 +125,19 @@ import { CompetitorIntelligence } from "./competitor-intelligence";
 export interface LiveCompetitorReport {
   competitors: CompetitorIntelligence[];
   marketGaps: string[];
+  sources: Source[];
 }
 
 export async function generateLiveCompetitors(): Promise<LiveCompetitorReport> {
-  const competitors = await searchCompetitorActivity();
+  const [competitors, sources] = await Promise.all([
+    searchCompetitorActivity(),
+    collectSources([
+      { q: "Tie House Egypt fashion 2026 campaign collection", days: 30 },
+      { q: "British House Egypt fashion shirts 2026", days: 30 },
+      { q: "Massimo Dutti Egypt 2026 collection", days: 30 },
+      { q: "Egyptian premium fashion brands 2026 competition", days: 30 },
+    ]),
+  ]);
 
   const prompt = `You are a competitive intelligence analyst for DEBACKERS Egypt (premium men+women fashion, Belgian heritage 1986).
 Using the LIVE web search results below, analyze Debackers' real competitors RIGHT NOW.
@@ -152,7 +175,7 @@ Cover Tie House, British House, Massimo Dutti Egypt, plus any other premium Egyp
     threatLevel: c.threatLevel || "medium",
     lastUpdated: new Date().toISOString(),
   }));
-  return { competitors: competitorsOut, marketGaps: raw.marketGaps ?? [] };
+  return { competitors: competitorsOut, marketGaps: raw.marketGaps ?? [], sources };
 }
 
 // ─── LIVE CAMPAIGNS ───────────────────────────────────────────────────
