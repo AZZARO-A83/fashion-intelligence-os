@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarRange, RefreshCw, AlertCircle, Target, Users, CalendarDays } from "lucide-react";
+import { CalendarRange, RefreshCw, Target, Users, CalendarDays } from "lucide-react";
 import { WeeklyBrief } from "@/types";
 import { HelpButton } from "@/components/ui/help-button";
+import { GenerationError } from "@/components/ui/generation-error";
 
 function DataBadge() {
   return <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-bold">🔵 AI RESEARCH</span>;
@@ -77,12 +78,7 @@ export default function WeeklyReportPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
+      {error && <GenerationError error={error} />}
 
       {!brief && !loading && !error && (
         <div className="bg-surface border border-dashed border-border rounded-xl p-12 text-center">

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProductSuggestions } from "@/components/campaigns/product-suggestions";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { cn, formatNumber, getMonthName, platformIcon, platformColor } from "@/lib/utils";
+import { GenerationError } from "@/components/ui/generation-error";
 import {
   Sparkles, Calendar, TrendingUp, Target, Users,
   ChevronDown, ChevronRight, Zap, AlertCircle, CheckCircle2,
@@ -326,15 +327,7 @@ export default function MonthlyPlanPage() {
         </div>
 
         {/* Error */}
-        {error && (
-          <div className="bg-red-400/5 border border-red-400/20 rounded-xl p-4 flex gap-3">
-            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <div>
-              <p className="text-xs text-red-400 font-medium">{error}</p>
-              <p className="text-[10px] text-muted mt-1">Add ANTHROPIC_API_KEY to .env.local to enable AI generation</p>
-            </div>
-          </div>
-        )}
+        {error && <GenerationError error={error} />}
 
         {/* Loading */}
         {loading && (

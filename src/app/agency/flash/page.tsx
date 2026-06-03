@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { FlameKindling, RefreshCw, TrendingUp, Zap, Users, AlertCircle, Copy, Check } from "lucide-react";
+import { FlameKindling, RefreshCw, TrendingUp, Zap, Users, Copy, Check } from "lucide-react";
 import { FlashBrief } from "@/types";
 import { HelpButton } from "@/components/ui/help-button";
+import { GenerationError } from "@/components/ui/generation-error";
 
 function DataBadge({ type }: { type: "live" | "ai" | "mock" }) {
   if (type === "live") return <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE</span>;
@@ -111,16 +112,7 @@ export default function FlashBriefPage() {
       </div>
 
       {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <div>
-            <p className="text-sm text-red-400 font-semibold mb-1">Failed — {step === "searching" ? "Web search failed" : "AI generation failed"}</p>
-            <p className="text-xs text-red-300">{error}</p>
-            <p className="text-xs text-muted mt-2">Check: GROQ_API_KEY and TAVILY_API_KEY are set in Vercel env vars</p>
-          </div>
-        </div>
-      )}
+      {error && <GenerationError error={error} />}
 
       {/* Empty state */}
       {!brief && !loading && !error && (

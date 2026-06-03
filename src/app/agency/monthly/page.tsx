@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { LineChart, RefreshCw, AlertCircle } from "lucide-react";
+import { LineChart, RefreshCw } from "lucide-react";
 import { MonthlyStrategy } from "@/types";
 import { HelpButton } from "@/components/ui/help-button";
+import { GenerationError } from "@/components/ui/generation-error";
 
 function DataBadge() {
   return <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold">🔵 AI RESEARCH</span>;
@@ -77,12 +78,7 @@ export default function MonthlyStrategyPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
-        </div>
-      )}
+      {error && <GenerationError error={error} />}
 
       {!strategy && !loading && !error && (
         <div className="bg-surface border border-dashed border-border rounded-xl p-12 text-center">
