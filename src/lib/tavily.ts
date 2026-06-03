@@ -129,6 +129,25 @@ export interface Source {
   summary?: string; // 1-2 line takeaway from the article so you know what's in it
 }
 
+// Turn a raw page snippet into a clean 1-2 sentence summary — strips nav menus,
+// markdown headers, and the repeated title, then keeps the first real prose.
+function cleanSnippet(content: string, title: string): string {
+  // Title without the trailing " - publisher" so we can strip its repeats.
+  const baseTitle = title.replace(/\s*[-|–]\s*[^-|–]+$/, "").trim();
+  let s = content
+    .replace(/^#+\s*/gm, " ")                 // markdown headers
+    .replace(/\bloading\.\.\.?/gi, " ")
+    .replace(/Automated translation[^.]*?original [a-z]{2}/gi, " ")
+    .replace(/\bPRESS RELEASE\b/gi, " ")
+    .replace(/\b(Home|Press|News|Fashion|Menu)\b/g, " ");
+  if (baseTitle.length > 6) s = s.split(baseTitle).join(" "); // remove ALL title repeats
+  s = s.replace(/\s+/g, " ").trim();
+  // Prefer the first sentence(s) with real substance (≥ 8 words).
+  const sentences = s.split(/(?<=[.!?])\s+/).filter((t) => t.split(" ").length >= 8);
+  const out = (sentences.slice(0, 2).join(" ") || s).trim();
+  return out.length > 260 ? out.slice(0, 257).trimEnd() + "…" : out;
+}
+
 export async function collectSources(
   queries: { q: string; days?: number; topic?: "general" | "news" }[]
 ): Promise<Source[]> {
@@ -148,14 +167,11 @@ export async function collectSources(
   for (const r of runs) {
     for (const x of r.results ?? []) {
       const title = (x.title || "").trim();
-      const snippet = (x.content || "").replace(/\s+/g, " ").trim();
+      const snippet = cleanSnippet(x.content || "", title);
       const relevant = (x.score ?? 0) >= 0.4 && title.length > 3 && !genericTitle.test(title) && snippet.length > 40;
       if (x.url && !seen.has(x.url) && relevant) {
         seen.add(x.url);
-        sources.push({
-          title, url: x.url, date: x.published_date, score: x.score,
-          summary: snippet.length > 260 ? snippet.slice(0, 257).trimEnd() + "…" : snippet,
-        });
+        sources.push({ title, url: x.url, date: x.published_date, score: x.score, summary: snippet });
       }
     }
   }
