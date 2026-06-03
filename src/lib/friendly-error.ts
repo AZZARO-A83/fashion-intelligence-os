@@ -10,8 +10,24 @@ export interface FriendlyError {
   kind: "daily-limit" | "minute-limit" | "no-key" | "search" | "generic";
 }
 
+// Pull "try again in 2h5m58s" out of a Groq error and tidy it to "2h 6m".
+function extractRetry(text: string): string | null {
+  const m = text.match(/try again in\s+([0-9hms.\s]+)/i);
+  if (!m) return null;
+  const h = m[1].match(/(\d+)\s*h/);
+  const mins = m[1].match(/(\d+)\s*m/);
+  const secs = m[1].match(/(\d+(?:\.\d+)?)\s*s/);
+  const parts: string[] = [];
+  if (h) parts.push(`${h[1]}h`);
+  if (mins) parts.push(`${mins[1]}m`);
+  if (!h && !mins && secs) parts.push(`${Math.ceil(parseFloat(secs[1]))}s`);
+  return parts.length ? parts.join(" ") : null;
+}
+
 export function friendlyError(raw: string | null | undefined): FriendlyError {
   const text = (raw || "").toLowerCase();
+  const retry = extractRetry(raw || "");
+  const retryLine = retry ? ` Try again in about ${retry}.` : "";
 
   // Daily token cap (TPD) — the free budget for the day is used up
   if (text.includes("per day") || text.includes("tpd")) {
@@ -19,8 +35,8 @@ export function friendlyError(raw: string | null | undefined): FriendlyError {
       kind: "daily-limit",
       title: "Daily AI limit reached",
       message:
-        "The free research budget for today is used up. It refills automatically — full reset at midnight (UTC), with some freeing up sooner.",
-      hint: "Come back in a couple of hours and try again. In normal use you won't hit this.",
+        "The free research budget for today is used up. It refills automatically." + retryLine,
+      hint: retry ? `Resets fully at midnight UTC. In normal use you won't hit this.` : "Come back in a couple of hours. In normal use you won't hit this.",
     };
   }
 
@@ -30,7 +46,7 @@ export function friendlyError(raw: string | null | undefined): FriendlyError {
       kind: "minute-limit",
       title: "Too much at once",
       message:
-        "This request was a little too large for the per-minute limit. Wait about a minute, then press generate again.",
+        "This request was a little too large for the per-minute limit." + (retry ? ` Try again in about ${retry}.` : " Wait about a minute, then press generate again."),
       hint: "If this keeps happening, tell the developer — the request may need trimming.",
     };
   }

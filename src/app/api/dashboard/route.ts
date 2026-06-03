@@ -7,6 +7,7 @@ import { getCachedReport, setCachedReport, isFresh } from "@/lib/cache";
 // Always run fresh on the server — never serve a stale static snapshot.
 // Sales numbers are pulled live each load; only AI insights are cached (below).
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // the heavy Shopify pull needs more than the 10s default
 
 const INSIGHTS_KEY = "dashboard:insights";
 const INSIGHTS_TTL = 6 * 60 * 60; // 6 hours
@@ -73,6 +74,7 @@ export async function GET(request: Request) {
       recoveryOpportunity: salesData.recoveryOpportunity ?? 0, // 🟢 live recoverable EGP
     },
     isLive,
+    dataError: salesData.dataError ?? null, // honest error if the live pull failed
     rangeFrom: salesData.rangeFrom,   // ISO start of the window shown
     rangeTo: salesData.rangeTo,       // ISO end of the window shown
     isDefaultRange,

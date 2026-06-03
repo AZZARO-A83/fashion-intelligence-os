@@ -1,5 +1,4 @@
 import { SalesData, TopProduct } from "@/types";
-import { mockSalesData } from "./mock-data";
 
 const SHOPIFY_URL = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -26,7 +25,20 @@ async function fetchShopify(endpoint: string) {
   return res.json();
 }
 
-// Pull ALL orders from Shopify within a date window, with pagination.
+// Fetch with automatic retry on Shopify's rate limit (429) and transient 5xx.
+async function shopifyFetchRaw(endpoint: string, attempt = 0): Promise<Response> {
+  const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
+    headers: shopifyHeaders(),
+  });
+  if ((res.status === 429 || res.status === 503) && attempt < 6) {
+    const wait = parseFloat(res.headers.get("Retry-After") || "1") * 1000 || 1000;
+    await new Promise((r) => setTimeout(r, wait));
+    return shopifyFetchRaw(endpoint, attempt + 1);
+  }
+  return res;
+}
+
+// Pull ALL orders from Shopify within a date window, with pagination + retry.
 async function getRealOrders(minISO: string, maxISO: string): Promise<any[]> {
   const allOrders: any[] = [];
   let pageInfo: string | null = null;
@@ -38,9 +50,7 @@ async function getRealOrders(minISO: string, maxISO: string): Promise<any[]> {
       ? `orders.json?status=any&created_at_min=${minISO}&created_at_max=${maxISO}&limit=250&fields=id,total_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`
       : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`;
 
-    const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
-      headers: shopifyHeaders(),
-    });
+    const res = await shopifyFetchRaw(endpoint);
 
     if (!res.ok) throw new Error(`Shopify orders failed: ${res.status}`);
 
@@ -257,7 +267,7 @@ function cairoYmdToUtc(ymd: string, endOfDay: boolean): Date {
   return new Date(guess - offset);
 }
 
-const REFUND_LOOKBACK_DAYS = 120; // fetch this far back so returns-by-refund-date catch older orders
+const REFUND_LOOKBACK_DAYS = 14; // light lookback — keeps fetches fast & crash-free (research tool, not accounting)
 
 // Today's date as YYYY-MM-DD in Egypt time.
 function egyptTodayYmd(): string {
@@ -273,13 +283,30 @@ function ymdMinusDays(ymd: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Honest zeroed result — used instead of MOCK data whenever the live fetch
+// fails or a window has no orders. We NEVER show invented numbers.
+function zeroSales(
+  meta: { rangeFrom: string; rangeTo: string },
+  isLive: boolean,
+  dataError?: string,
+  abandonedCarts = 0,
+): SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string } {
+  return {
+    totalRevenue: 0, totalOrders: 0, avgOrderValue: 0, conversionRate: 0,
+    weeklyGrowth: 0, ordersGrowth: 0, aovGrowth: 0, repeatPurchaseRate: 0,
+    abandonedCarts, recoveryOpportunity: 0,
+    topProducts: [], lowProducts: [], insights: [], revenueByDay: [],
+    isLive, dataError, ...meta,
+  };
+}
+
 // Main entry point — returns data + honest live/mock status for a date window.
 export async function getSalesData(
   range?: SalesRange
 ): Promise<SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string }> {
-  // Default = Shopify "Last 30 days" = Egypt today−30 → today.
+  // Default = Last 7 days (Egypt today−7 → today). Light + research-focused.
   const toYmd = range?.toYmd ?? egyptTodayYmd();
-  const fromYmd = range?.fromYmd ?? ymdMinusDays(toYmd, 30);
+  const fromYmd = range?.fromYmd ?? ymdMinusDays(toYmd, 7);
   const to = cairoYmdToUtc(toYmd, true);
   const from = cairoYmdToUtc(fromYmd, false);
   const rangeMs = Math.max(86400000, to.getTime() - from.getTime());
@@ -289,8 +316,7 @@ export async function getSalesData(
   const meta = { rangeFrom: from.toISOString(), rangeTo: to.toISOString() };
 
   if (!hasShopifyKeys()) {
-    console.log("[Shopify] No keys — using mock data");
-    return { ...mockSalesData, isLive: false, dataError: "Shopify credentials not configured", ...meta };
+    return zeroSales(meta, false, "Shopify credentials not configured");
   }
 
   try {
@@ -305,22 +331,16 @@ export async function getSalesData(
     console.log(`[Shopify] Got ${orders.length} orders (incl. prior period)`);
 
     if (!orders.length) {
-      return { ...mockSalesData, isLive: false, dataError: "No orders found in this date range", ...meta };
+      // 150-day fetch returned nothing — almost certainly a load issue, not a real empty store.
+      return zeroSales(meta, false, "Couldn't load orders from Shopify — try again", abandonedCarts);
     }
 
     const processed = processOrders(orders, from.getTime(), to.getTime());
     const { weeklyGrowthCalc, ordersGrowthCalc, aovGrowthCalc, repeatPurchaseRateCalc, ...salesProcessed } = processed;
 
-    // Honest empty state: real connection, but zero orders in THIS window — show zeros, not mock.
+    // Genuine empty window: connection works, but zero orders in THIS range — honest zeros.
     if (processed.totalRevenue === undefined) {
-      return {
-        ...mockSalesData,
-        totalRevenue: 0, totalOrders: 0, avgOrderValue: 0,
-        topProducts: [], lowProducts: [], revenueByDay: [],
-        weeklyGrowth: 0, ordersGrowth: 0, aovGrowth: 0,
-        repeatPurchaseRate: 0, abandonedCarts, recoveryOpportunity: 0,
-        conversionRate: 0, insights: [], isLive: true, ...meta,
-      };
+      return zeroSales(meta, true, undefined, abandonedCarts);
     }
 
     // ─── Real conversion rate from Shopify Analytics ──────────────
@@ -347,8 +367,12 @@ export async function getSalesData(
     const recoveryOpportunity = Math.round(abandonedCartsValue * 0.15);
 
     return {
-      ...mockSalesData,
-      ...salesProcessed,
+      totalRevenue: salesProcessed.totalRevenue ?? 0,
+      totalOrders: salesProcessed.totalOrders ?? 0,
+      avgOrderValue: salesProcessed.avgOrderValue ?? 0,
+      topProducts: salesProcessed.topProducts ?? [],
+      lowProducts: salesProcessed.lowProducts ?? [],
+      revenueByDay: salesProcessed.revenueByDay ?? [],
       abandonedCarts,
       conversionRate,
       repeatPurchaseRate: repeatPurchaseRateCalc, // 🟢 real — computed from customer order counts
@@ -363,7 +387,7 @@ export async function getSalesData(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[Shopify] Real fetch failed:", msg);
-    return { ...mockSalesData, isLive: false, dataError: `Shopify API error: ${msg}`, ...meta };
+    return zeroSales(meta, false, `Shopify API error: ${msg}`);
   }
 }
 

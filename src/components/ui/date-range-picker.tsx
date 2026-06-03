@@ -18,18 +18,20 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-type Preset = "today" | "7d" | "30d" | "month" | "custom";
+type Preset = "today" | "48h" | "7d" | "30d" | "custom";
 
 const PRESETS: { key: Preset; label: string }[] = [
   { key: "today", label: "Today" },
+  { key: "48h", label: "Last 48h" },
   { key: "7d", label: "Last 7 days" },
   { key: "30d", label: "Last 30 days" },
-  { key: "month", label: "This Month" },
   { key: "custom", label: "Custom" },
 ];
 
 export function DateRangePicker({ value, onChange }: Props) {
-  const [active, setActive] = useState<Preset>("30d");
+  const [active, setActive] = useState<Preset>("7d");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   const pick = (preset: Preset) => {
     setActive(preset);
@@ -38,10 +40,10 @@ export function DateRangePicker({ value, onChange }: Props) {
 
     // Shopify-style: "Last N days" starts N days before today (so today−7 .. today).
     if (preset === "today") onChange({ from: today, to: today });
-    else if (preset === "7d") onChange({ from: ymd(new Date(now.getTime() - 7 * 86400000)), to: today });
-    else if (preset === "30d") onChange({ from: null, to: null }); // default (Egypt last 30 days)
-    else if (preset === "month") onChange({ from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: today });
-    // "custom" waits for the date inputs below
+    else if (preset === "48h") onChange({ from: ymd(new Date(now.getTime() - 2 * 86400000)), to: today });
+    else if (preset === "7d") onChange({ from: null, to: null }); // default (Egypt last 7 days)
+    else if (preset === "30d") onChange({ from: ymd(new Date(now.getTime() - 30 * 86400000)), to: today });
+    // "custom" waits for the date inputs + Apply button below
   };
 
   return (
@@ -65,19 +67,27 @@ export function DateRangePicker({ value, onChange }: Props) {
           <Calendar className="w-3.5 h-3.5 text-muted" />
           <input
             type="date"
-            value={value.from ?? ""}
-            max={value.to ?? ymd(new Date())}
-            onChange={(e) => onChange({ from: e.target.value || null, to: value.to })}
+            value={customFrom}
+            max={customTo || ymd(new Date())}
+            onChange={(e) => setCustomFrom(e.target.value)}
             className="bg-transparent text-xs text-foreground outline-none"
           />
           <span className="text-muted text-xs">→</span>
           <input
             type="date"
-            value={value.to ?? ""}
+            value={customTo}
             max={ymd(new Date())}
-            onChange={(e) => onChange({ from: value.from, to: e.target.value || null })}
+            onChange={(e) => setCustomTo(e.target.value)}
             className="bg-transparent text-xs text-foreground outline-none"
           />
+          <button
+            type="button"
+            disabled={!customFrom || !customTo}
+            onClick={() => onChange({ from: customFrom, to: customTo })}
+            className="text-xs px-3 py-1 rounded-md font-semibold bg-accent text-black disabled:opacity-40 hover:bg-accent/90 transition-colors"
+          >
+            Apply
+          </button>
         </div>
       )}
     </div>

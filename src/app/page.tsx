@@ -38,6 +38,7 @@ interface DashboardData {
     recoveryOpportunity: number;
   };
   isLive: boolean;
+  dataError: string | null;
   rangeFrom: string;
   rangeTo: string;
   seasonalContext: {
@@ -115,7 +116,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Campaign Intelligence Dashboard"
         subtitle={`Egyptian Fashion Market · ${new Date().toLocaleDateString("en-EG", { month: "long", year: "numeric" })}`}
-        badge={isLive ? "🟢 Live Shopify" : "🔴 Mock data"}
+        badge={isLive ? "🟢 Live Shopify" : "🔴 Couldn't load"}
         action={
           <Link
             href="/campaigns"
@@ -138,6 +139,13 @@ export default function DashboardPage() {
           </div>
           <DateRangePicker value={range} onChange={setRange} />
         </div>
+
+        {/* Honest error — shown instead of fake numbers when the live pull fails */}
+        {data.dataError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">
+            Couldn&apos;t load live Shopify data for this range: {data.dataError}. Numbers below are zero, not estimated — try again in a moment.
+          </div>
+        )}
 
         {/* Seasonal Alert */}
         <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 flex items-start gap-4">
