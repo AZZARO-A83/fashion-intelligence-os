@@ -11,32 +11,43 @@ export const dynamic = "force-dynamic";
 const INSIGHTS_KEY = "dashboard:insights";
 const INSIGHTS_TTL = 6 * 60 * 60; // 6 hours — matches Shopify data cache
 
-export async function GET() {
+export async function GET(request: Request) {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
   const seasonalContext = getSeasonalContext(month, year);
 
-  // 🟢 Real Shopify data
-  const salesData = await getSalesData();
+  // Optional date range from the picker (?from=YYYY-MM-DD&to=YYYY-MM-DD)
+  const { searchParams } = new URL(request.url);
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  const range = fromParam && toParam
+    ? { from: new Date(fromParam + "T00:00:00Z"), to: new Date(toParam + "T23:59:59Z") }
+    : undefined;
+  const isDefaultRange = !range;
+
+  // 🟢 Real Shopify data for the selected window
+  const salesData = await getSalesData(range);
   const { isLive } = salesData;
 
-  // 🔵 AI insights — cached 6h so the home page doesn't burn Groq on every visit.
+  // 🔵 AI insights — only for the DEFAULT 30-day view, cached 6h. Custom ranges
+  // reuse those cached insights (no extra Groq tokens when changing dates).
   let insights: string[] = [];
   const cached = await getCachedReport<string[]>(INSIGHTS_KEY);
   if (cached && isFresh(cached.generatedAt, INSIGHTS_TTL)) {
     insights = cached.data;
-  } else {
+  } else if (isDefaultRange) {
     try {
       insights = await analyzeSalesData(salesData);
       await setCachedReport(INSIGHTS_KEY, insights, INSIGHTS_TTL);
     } catch {
-      // Reuse the last good insights if generation is rate-limited; else honest note.
       insights = cached?.data ?? [
         "AI insights paused — daily limit reached. They refill automatically.",
       ];
     }
+  } else {
+    insights = cached?.data ?? [];
   }
 
   return NextResponse.json({
@@ -52,9 +63,12 @@ export async function GET() {
       recoveryOpportunity: salesData.recoveryOpportunity ?? 0, // 🟢 live recoverable EGP
     },
     isLive,
+    rangeFrom: salesData.rangeFrom,   // ISO start of the window shown
+    rangeTo: salesData.rangeTo,       // ISO end of the window shown
+    isDefaultRange,
     seasonalContext,
     recentInsights: insights,
     topProducts: salesData.topProducts.slice(0, 4), // 🟢 live Shopify bestsellers
-    revenueByDay: salesData.revenueByDay.slice(-7),
+    revenueByDay: salesData.revenueByDay.slice(-14),
   });
 }

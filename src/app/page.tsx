@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
+import { DateRangePicker, type DateRange } from "@/components/ui/date-range-picker";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import {
   ShoppingCart,
@@ -37,6 +38,8 @@ interface DashboardData {
     recoveryOpportunity: number;
   };
   isLive: boolean;
+  rangeFrom: string;
+  rangeTo: string;
   seasonalContext: {
     current: string;
     upcoming: { season: string; daysAway: number }[];
@@ -75,14 +78,18 @@ function CustomTooltip({ active, payload, label }: any) {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<DateRange>({ from: null, to: null });
 
   useEffect(() => {
-    fetch("/api/dashboard")
+    setLoading(true);
+    const qs = range.from && range.to ? `?from=${range.from}&to=${range.to}` : "";
+    fetch(`/api/dashboard${qs}`)
       .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); });
-  }, []);
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [range]);
 
-  if (loading || !data) {
+  if (!data) {
     return (
       <div className="p-8 space-y-6 animate-pulse">
         <div className="h-8 bg-surface rounded w-48" />
@@ -95,6 +102,10 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const fmtDay = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" });
+  const rangeLabel = data.rangeFrom && data.rangeTo ? `${fmtDay(data.rangeFrom)} → ${fmtDay(data.rangeTo)}` : "";
 
   const { stats, isLive, seasonalContext, recentInsights, topProducts, revenueByDay } = data;
   const currentSeason = SEASON_LABELS[seasonalContext.current] ?? seasonalContext.current;
@@ -118,6 +129,16 @@ export default function DashboardPage() {
 
       <div className="p-8 space-y-8">
 
+        {/* Date range — what window these numbers cover */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">Showing data for</span>
+            <span className="text-sm font-semibold text-foreground">{rangeLabel}</span>
+            {loading && <span className="text-xs text-accent animate-pulse">updating…</span>}
+          </div>
+          <DateRangePicker value={range} onChange={setRange} />
+        </div>
+
         {/* Seasonal Alert */}
         <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 flex items-start gap-4">
           <Calendar className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
@@ -137,10 +158,10 @@ export default function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            label="Monthly Revenue"
+            label="Revenue"
             value={`EGP ${formatNumber(stats.totalRevenue)}`}
             change={stats.revenueGrowth}
-            sub="Last 30 days"
+            sub="Selected range"
             icon={<ShoppingCart className="w-4 h-4 text-accent" />}
             accent
           />
@@ -148,7 +169,7 @@ export default function DashboardPage() {
             label="Total Orders"
             value={stats.totalOrders.toLocaleString()}
             change={stats.ordersGrowth}
-            sub="Last 30 days"
+            sub="Selected range"
             icon={<Package className="w-4 h-4 text-foreground-muted" />}
           />
           <StatCard
@@ -173,10 +194,12 @@ export default function DashboardPage() {
           <div className="col-span-2 bg-surface border border-border/50 rounded-xl p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Revenue (Last 7 Days)</h2>
-                <p className="text-xs text-muted mt-0.5">Daily revenue in EGP</p>
+                <h2 className="text-sm font-semibold text-foreground">Revenue by day</h2>
+                <p className="text-xs text-muted mt-0.5">Daily revenue in EGP · selected range</p>
               </div>
-              <Badge variant="success">+{stats.revenueGrowth}% WoW</Badge>
+              <Badge variant={stats.revenueGrowth >= 0 ? "success" : "warning"}>
+                {stats.revenueGrowth >= 0 ? "+" : ""}{stats.revenueGrowth}% vs prev period
+              </Badge>
             </div>
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={revenueByDay} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>

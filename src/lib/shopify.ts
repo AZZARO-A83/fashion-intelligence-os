@@ -26,9 +26,8 @@ async function fetchShopify(endpoint: string) {
   return res.json();
 }
 
-// Pull ALL orders from Shopify (last 30 days) with pagination
-async function getRealOrders(): Promise<any[]> {
-  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+// Pull ALL orders from Shopify within a date window, with pagination.
+async function getRealOrders(minISO: string, maxISO: string): Promise<any[]> {
   const allOrders: any[] = [];
   let pageInfo: string | null = null;
   let isFirstPage = true;
@@ -36,7 +35,7 @@ async function getRealOrders(): Promise<any[]> {
 
   while (keepGoing) {
     const endpoint: string = isFirstPage
-      ? `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`
+      ? `orders.json?status=any&created_at_min=${minISO}&created_at_max=${maxISO}&limit=250&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`
       : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`;
 
     const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
@@ -114,60 +113,58 @@ async function getRealAbandonedCarts(): Promise<{ count: number; totalValue: num
   }
 }
 
-// Process raw Shopify orders into real analytics
-function processOrders(orders: any[]): Partial<SalesData> & {
+// Net revenue (after refunds) for a set of orders — matches Shopify "Net sales".
+function netRevenue(orders: any[]): number {
+  const gross = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+  const refunds = orders.reduce((s, o) => {
+    const rf = (o.refunds ?? []).reduce((rs: number, r: any) =>
+      rs + (r.refund_line_items ?? []).reduce((x: number, rli: any) => x + parseFloat(rli.subtotal || 0), 0), 0);
+    return s + rf;
+  }, 0);
+  return gross - refunds;
+}
+
+// Process raw Shopify orders into analytics for the CURRENT window [fromMs, toMs].
+// `orders` spans [priorFrom, toMs] so growth can compare to the equal prior period.
+function processOrders(orders: any[], fromMs: number, toMs: number): Partial<SalesData> & {
   weeklyGrowthCalc: number;
   ordersGrowthCalc: number;
   aovGrowthCalc: number;
   repeatPurchaseRateCalc: number;
 } {
-  if (!orders.length) return { weeklyGrowthCalc: 0, ordersGrowthCalc: 0, aovGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
+  const rangeMs = Math.max(1, toMs - fromMs);
+  const priorFromMs = fromMs - rangeMs;
 
-  // Gross revenue
-  const grossRevenue = orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
+  const inWindow = (o: any, lo: number, hi: number) => {
+    const t = new Date(o.created_at).getTime();
+    return t >= lo && t <= hi;
+  };
 
-  // Subtract refunds to get net revenue (matches Shopify dashboard "Net sales")
-  const totalRefunds = orders.reduce((s: number, o: any) => {
-    const refunds = o.refunds ?? [];
-    const refundTotal = refunds.reduce((rs: number, r: any) => {
-      const refundLineItems = r.refund_line_items ?? [];
-      return rs + refundLineItems.reduce((rls: number, rli: any) => rls + parseFloat(rli.subtotal || 0), 0);
-    }, 0);
-    return s + refundTotal;
-  }, 0);
+  // Current period orders vs the equal-length period immediately before it.
+  const current = orders.filter((o) => inWindow(o, fromMs, toMs));
+  const prior = orders.filter((o) => inWindow(o, priorFromMs, fromMs - 1));
 
-  const totalRevenue = grossRevenue - totalRefunds;
-  const totalOrders = orders.length;
+  if (!current.length) return { weeklyGrowthCalc: 0, ordersGrowthCalc: 0, aovGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
+
+  const totalRevenue = netRevenue(current);
+  const totalOrders = current.length;
   const avgOrderValue = Math.round(totalRevenue / totalOrders);
 
-  // ─── Weekly growth — last 7 days vs previous 7 days ──────────────
-  const now = Date.now();
-  const day7 = now - 7 * 86400000;
-  const day14 = now - 14 * 86400000;
-
-  const last7Orders = orders.filter((o: any) => new Date(o.created_at).getTime() > day7);
-  const prev7Orders = orders.filter((o: any) => {
-    const t = new Date(o.created_at).getTime();
-    return t > day14 && t <= day7;
-  });
-
-  const last7Revenue = last7Orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
-  const prev7Revenue = prev7Orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
-
+  // ─── Growth: current period vs equal prior period ─────────────────
   const pct = (now: number, prev: number) =>
     prev > 0 ? Math.round(((now - prev) / prev) * 100 * 10) / 10 : 0;
 
-  // Real growth: last 7 days vs previous 7 days — all from Shopify orders
-  const weeklyGrowthCalc = pct(last7Revenue, prev7Revenue);
-  const ordersGrowthCalc = pct(last7Orders.length, prev7Orders.length);
+  const curRev = current.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+  const priRev = prior.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+  const weeklyGrowthCalc = pct(curRev, priRev);
+  const ordersGrowthCalc = pct(current.length, prior.length);
+  const curAov = current.length ? curRev / current.length : 0;
+  const priAov = prior.length ? priRev / prior.length : 0;
+  const aovGrowthCalc = pct(curAov, priAov);
 
-  const last7Aov = last7Orders.length ? last7Revenue / last7Orders.length : 0;
-  const prev7Aov = prev7Orders.length ? prev7Revenue / prev7Orders.length : 0;
-  const aovGrowthCalc = pct(last7Aov, prev7Aov);
-
-  // ─── Repeat purchase rate — customers with 2+ orders ─────────────
+  // ─── Repeat purchase rate — customers with 2+ orders (current window) ──
   const customerOrderCount: Record<string, number> = {};
-  for (const order of orders) {
+  for (const order of current) {
     const cid = order.customer?.id?.toString() ?? order.email ?? "guest";
     if (cid !== "guest") {
       customerOrderCount[cid] = (customerOrderCount[cid] || 0) + 1;
@@ -179,9 +176,9 @@ function processOrders(orders: any[]): Partial<SalesData> & {
     ? Math.round((repeatCustomers / totalCustomers) * 100 * 10) / 10
     : 0;
 
-  // ─── Product sales map ────────────────────────────────────────────
+  // ─── Product sales map (current window) ───────────────────────────
   const productMap: Record<string, { revenue: number; units: number; name: string }> = {};
-  for (const order of orders) {
+  for (const order of current) {
     for (const item of order.line_items ?? []) {
       const key = item.product_id?.toString() ?? item.title;
       if (!productMap[key]) productMap[key] = { revenue: 0, units: 0, name: item.title };
@@ -196,7 +193,7 @@ function processOrders(orders: any[]): Partial<SalesData> & {
     name: p.name,
     revenue: Math.round(p.revenue),
     units: p.units,
-    growth: 0, // needs historical data for real growth %
+    growth: 0,
     category: "shopify",
   }));
 
@@ -208,9 +205,9 @@ function processOrders(orders: any[]): Partial<SalesData> & {
     category: "shopify",
   }));
 
-  // ─── Revenue by day ───────────────────────────────────────────────
+  // ─── Revenue by day (current window) ──────────────────────────────
   const dayMap: Record<string, { revenue: number; orders: number }> = {};
-  for (const order of orders) {
+  for (const order of current) {
     const day = order.created_at?.split("T")[0];
     if (!day) continue;
     if (!dayMap[day]) dayMap[day] = { revenue: 0, orders: 0 };
@@ -235,30 +232,56 @@ function processOrders(orders: any[]): Partial<SalesData> & {
   };
 }
 
-// Main entry point — returns data + honest live/mock status
-export async function getSalesData(): Promise<SalesData & { isLive: boolean; dataError?: string }> {
+export interface SalesRange {
+  from?: Date; // start of the window (default: 30 days ago)
+  to?: Date;   // end of the window (default: now)
+}
+
+// Main entry point — returns data + honest live/mock status for a date window.
+export async function getSalesData(
+  range?: SalesRange
+): Promise<SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string }> {
+  const to = range?.to ?? new Date();
+  const from = range?.from ?? new Date(to.getTime() - 30 * 86400000);
+  const rangeMs = Math.max(86400000, to.getTime() - from.getTime());
+  const priorFrom = new Date(from.getTime() - rangeMs); // fetch prior period too, for growth
+
+  const meta = { rangeFrom: from.toISOString(), rangeTo: to.toISOString() };
+
   if (!hasShopifyKeys()) {
     console.log("[Shopify] No keys — using mock data");
-    return { ...mockSalesData, isLive: false, dataError: "Shopify credentials not configured" };
+    return { ...mockSalesData, isLive: false, dataError: "Shopify credentials not configured", ...meta };
   }
 
   try {
-    console.log("[Shopify] Fetching real data from", SHOPIFY_URL);
+    console.log("[Shopify] Fetching real data from", SHOPIFY_URL, from.toISOString(), "→", to.toISOString());
     const [orders, abandonedCartsData] = await Promise.all([
-      getRealOrders(),
+      getRealOrders(priorFrom.toISOString(), to.toISOString()),
       getRealAbandonedCarts(),
     ]);
     const abandonedCarts = abandonedCartsData.count;
     const abandonedCartsValue = abandonedCartsData.totalValue;
 
-    console.log(`[Shopify] Got ${orders.length} orders`);
+    console.log(`[Shopify] Got ${orders.length} orders (incl. prior period)`);
 
     if (!orders.length) {
-      return { ...mockSalesData, isLive: false, dataError: "No orders found in Shopify (last 30 days) — showing mock data" };
+      return { ...mockSalesData, isLive: false, dataError: "No orders found in this date range", ...meta };
     }
 
-    const processed = processOrders(orders);
+    const processed = processOrders(orders, from.getTime(), to.getTime());
     const { weeklyGrowthCalc, ordersGrowthCalc, aovGrowthCalc, repeatPurchaseRateCalc, ...salesProcessed } = processed;
+
+    // Honest empty state: real connection, but zero orders in THIS window — show zeros, not mock.
+    if (processed.totalRevenue === undefined) {
+      return {
+        ...mockSalesData,
+        totalRevenue: 0, totalOrders: 0, avgOrderValue: 0,
+        topProducts: [], lowProducts: [], revenueByDay: [],
+        weeklyGrowth: 0, ordersGrowth: 0, aovGrowth: 0,
+        repeatPurchaseRate: 0, abandonedCarts, recoveryOpportunity: 0,
+        conversionRate: 0, insights: [], isLive: true, ...meta,
+      };
+    }
 
     // ─── Real conversion rate from Shopify Analytics ──────────────
     // Shopify REST doesn't expose sessions directly.
@@ -295,11 +318,12 @@ export async function getSalesData(): Promise<SalesData & { isLive: boolean; dat
       recoveryOpportunity,
       insights: [],
       isLive: true,
+      ...meta,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[Shopify] Real fetch failed:", msg);
-    return { ...mockSalesData, isLive: false, dataError: `Shopify API error: ${msg}` };
+    return { ...mockSalesData, isLive: false, dataError: `Shopify API error: ${msg}`, ...meta };
   }
 }
 
