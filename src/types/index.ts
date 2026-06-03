@@ -21,6 +21,8 @@ export interface SalesData {
   avgOrderValue: number;
   conversionRate: number;
   weeklyGrowth: number;
+  ordersGrowth?: number;
+  aovGrowth?: number;
   repeatPurchaseRate: number;
   abandonedCarts: number;
   recoveryOpportunity?: number;

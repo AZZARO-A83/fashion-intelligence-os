@@ -4,14 +4,12 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { ScoreRing } from "@/components/ui/score-ring";
-import { formatCurrency, formatNumber, platformIcon } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/utils";
 import {
   ShoppingCart,
   Package,
   TrendingUp,
   Zap,
-  AlertCircle,
   ChevronRight,
   Sparkles,
   Calendar,
@@ -34,18 +32,18 @@ interface DashboardData {
     ordersGrowth: number;
     avgOrderValue: number;
     aovGrowth: number;
-    activeCampaigns: number;
-    topTrend: string;
-    trendScore: number;
+    repeatPurchaseRate: number;
+    conversionRate: number;
+    abandonedCarts: number;
   };
+  isLive: boolean;
   seasonalContext: {
     current: string;
     upcoming: { season: string; daysAway: number }[];
     recommendations: string[];
   };
   recentInsights: string[];
-  topTrends: { name: string; platform: string; trendScore: number; growthRate: number }[];
-  activeCampaigns: { name: string; confidenceScore: number; platforms: string[] }[];
+  topProducts: { name: string; revenue: number; units: number }[];
   revenueByDay: { date: string; revenue: number; orders: number }[];
 }
 
@@ -98,7 +96,7 @@ export default function DashboardPage() {
     );
   }
 
-  const { stats, seasonalContext, recentInsights, topTrends, activeCampaigns, revenueByDay } = data;
+  const { stats, isLive, seasonalContext, recentInsights, topProducts, revenueByDay } = data;
   const currentSeason = SEASON_LABELS[seasonalContext.current] ?? seasonalContext.current;
 
   return (
@@ -106,7 +104,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Campaign Intelligence Dashboard"
         subtitle={`Egyptian Fashion Market · ${new Date().toLocaleDateString("en-EG", { month: "long", year: "numeric" })}`}
-        badge="Live"
+        badge={isLive ? "🟢 Live Shopify" : "🔴 Mock data"}
         action={
           <Link
             href="/campaigns"
@@ -161,9 +159,9 @@ export default function DashboardPage() {
             icon={<TrendingUp className="w-4 h-4 text-foreground-muted" />}
           />
           <StatCard
-            label="Top Trend Score"
-            value={`${stats.trendScore}/100`}
-            sub={stats.topTrend}
+            label="Repeat Buyers"
+            value={`${stats.repeatPurchaseRate}%`}
+            sub="Customers with 2+ orders"
             icon={<Zap className="w-4 h-4 text-foreground-muted" />}
           />
         </div>
@@ -228,64 +226,62 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Trends + Campaigns */}
+        {/* Top Products + Store Health — all live from Shopify */}
         <div className="grid grid-cols-2 gap-6">
 
-          {/* Top Trends */}
+          {/* Top Products (live Shopify bestsellers) */}
           <div className="bg-surface border border-border/50 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-foreground">Top Trends Now</h2>
-              <Link href="/trends" className="text-xs text-accent hover:underline">View all</Link>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">Top Products</h2>
+                <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE</span>
+              </div>
+              <Link href="/sales" className="text-xs text-accent hover:underline">View all</Link>
             </div>
-            <div className="space-y-3">
-              {topTrends.map((trend, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
-                  <span className="text-base">{platformIcon(trend.platform)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{trend.name}</p>
-                    <p className="text-xs text-muted capitalize">{trend.platform} · +{trend.growthRate}% growth</p>
-                  </div>
-                  <ScoreRing score={trend.trendScore} size="sm" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Active Campaigns */}
-          <div className="bg-surface border border-border/50 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-foreground">Active Campaigns</h2>
-              <Link href="/campaigns" className="text-xs text-accent hover:underline">View all</Link>
-            </div>
-            {activeCampaigns.length === 0 ? (
+            {topProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
-                <AlertCircle className="w-8 h-8 text-muted mb-2" />
-                <p className="text-sm text-foreground-muted">No active campaigns</p>
-                <Link
-                  href="/campaigns"
-                  className="mt-3 text-xs text-accent hover:underline flex items-center gap-1"
-                >
-                  Generate this month's plan <ChevronRight className="w-3 h-3" />
-                </Link>
+                <Package className="w-8 h-8 text-muted mb-2" />
+                <p className="text-sm text-foreground-muted">No sales in the last 30 days</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {activeCampaigns.map((camp, i) => (
+                {topProducts.map((p, i) => (
                   <div key={i} className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
-                    <ScoreRing score={camp.confidenceScore} size="sm" />
+                    <span className="text-xs font-bold text-accent w-5 flex-shrink-0">{i + 1}.</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{camp.name}</p>
-                      <div className="flex gap-1 mt-1">
-                        {camp.platforms.map((p) => (
-                          <span key={p} className="text-[10px] text-muted">{platformIcon(p)}</span>
-                        ))}
-                      </div>
+                      <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                      <p className="text-xs text-muted">{p.units} sold</p>
                     </div>
-                    <Badge variant="success">Active</Badge>
+                    <span className="text-sm font-semibold text-foreground">{formatCurrency(p.revenue)}</span>
                   </div>
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Store Health (live Shopify metrics) */}
+          <div className="bg-surface border border-border/50 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <h2 className="text-sm font-semibold text-foreground">Store Health</h2>
+              <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE</span>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
+                <span className="text-sm text-foreground-muted">Conversion rate</span>
+                <span className="text-sm font-semibold text-foreground">{stats.conversionRate}%</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
+                <span className="text-sm text-foreground-muted">Repeat buyers</span>
+                <span className="text-sm font-semibold text-foreground">{stats.repeatPurchaseRate}%</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
+                <span className="text-sm text-foreground-muted">Abandoned carts (30d)</span>
+                <span className="text-sm font-semibold text-foreground">{stats.abandonedCarts}</span>
+              </div>
+            </div>
+            <Link href="/sales" className="flex items-center gap-1 text-xs text-accent mt-4 hover:underline">
+              Full sales breakdown <ChevronRight className="w-3 h-3" />
+            </Link>
           </div>
         </div>
 

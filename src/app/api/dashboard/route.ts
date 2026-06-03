@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { mockTrends, mockCampaigns } from "@/lib/mock-data";
 import { getSalesData } from "@/lib/shopify";
 import { getSeasonalContext } from "@/lib/egyptian-context";
 import { analyzeSalesData } from "@/lib/claude";
+import { getCachedReport, setCachedReport, isFresh } from "@/lib/cache";
+
+const INSIGHTS_KEY = "dashboard:insights";
+const INSIGHTS_TTL = 6 * 60 * 60; // 6 hours — matches Shopify data cache
 
 export async function GET() {
   const now = new Date();
@@ -15,13 +18,21 @@ export async function GET() {
   const salesData = await getSalesData();
   const { isLive } = salesData;
 
+  // 🔵 AI insights — cached 6h so the home page doesn't burn Groq on every visit.
   let insights: string[] = [];
-  try {
-    insights = await analyzeSalesData(salesData);
-  } catch {
-    insights = [
-      "Connect GROQ_API_KEY to Vercel to enable AI insights.",
-    ];
+  const cached = await getCachedReport<string[]>(INSIGHTS_KEY);
+  if (cached && isFresh(cached.generatedAt, INSIGHTS_TTL)) {
+    insights = cached.data;
+  } else {
+    try {
+      insights = await analyzeSalesData(salesData);
+      await setCachedReport(INSIGHTS_KEY, insights, INSIGHTS_TTL);
+    } catch {
+      // Reuse the last good insights if generation is rate-limited; else honest note.
+      insights = cached?.data ?? [
+        "AI insights paused — daily limit reached. They refill automatically.",
+      ];
+    }
   }
 
   return NextResponse.json({
@@ -29,18 +40,17 @@ export async function GET() {
       totalRevenue: salesData.totalRevenue,
       revenueGrowth: salesData.weeklyGrowth,
       totalOrders: salesData.totalOrders,
-      ordersGrowth: 8.4,
+      ordersGrowth: salesData.ordersGrowth ?? 0,   // 🟢 real, calculated from Shopify
       avgOrderValue: salesData.avgOrderValue,
-      aovGrowth: 4.1,
-      activeCampaigns: mockCampaigns.filter((c) => c.status === "ACTIVE").length,
-      topTrend: "Old Money Aesthetic",
-      trendScore: 88,
+      aovGrowth: salesData.aovGrowth ?? 0,          // 🟢 real, calculated from Shopify
+      repeatPurchaseRate: salesData.repeatPurchaseRate, // 🟢 live repeat-buyer %
+      conversionRate: salesData.conversionRate,
+      abandonedCarts: salesData.abandonedCarts,         // 🟢 live abandoned checkouts
     },
     isLive,
     seasonalContext,
     recentInsights: insights,
-    topTrends: mockTrends.slice(0, 3),
-    activeCampaigns: mockCampaigns.filter((c) => c.status === "ACTIVE"),
+    topProducts: salesData.topProducts.slice(0, 4), // 🟢 live Shopify bestsellers
     revenueByDay: salesData.revenueByDay.slice(-7),
   });
 }

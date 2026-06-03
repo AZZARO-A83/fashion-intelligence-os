@@ -117,9 +117,11 @@ async function getRealAbandonedCarts(): Promise<{ count: number; totalValue: num
 // Process raw Shopify orders into real analytics
 function processOrders(orders: any[]): Partial<SalesData> & {
   weeklyGrowthCalc: number;
+  ordersGrowthCalc: number;
+  aovGrowthCalc: number;
   repeatPurchaseRateCalc: number;
 } {
-  if (!orders.length) return { weeklyGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
+  if (!orders.length) return { weeklyGrowthCalc: 0, ordersGrowthCalc: 0, aovGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
 
   // Gross revenue
   const grossRevenue = orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
@@ -143,20 +145,25 @@ function processOrders(orders: any[]): Partial<SalesData> & {
   const day7 = now - 7 * 86400000;
   const day14 = now - 14 * 86400000;
 
-  const last7Revenue = orders
-    .filter((o: any) => new Date(o.created_at).getTime() > day7)
-    .reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
+  const last7Orders = orders.filter((o: any) => new Date(o.created_at).getTime() > day7);
+  const prev7Orders = orders.filter((o: any) => {
+    const t = new Date(o.created_at).getTime();
+    return t > day14 && t <= day7;
+  });
 
-  const prev7Revenue = orders
-    .filter((o: any) => {
-      const t = new Date(o.created_at).getTime();
-      return t > day14 && t <= day7;
-    })
-    .reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
+  const last7Revenue = last7Orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
+  const prev7Revenue = prev7Orders.reduce((s: number, o: any) => s + parseFloat(o.total_price || 0), 0);
 
-  const weeklyGrowthCalc = prev7Revenue > 0
-    ? Math.round(((last7Revenue - prev7Revenue) / prev7Revenue) * 100 * 10) / 10
-    : 0;
+  const pct = (now: number, prev: number) =>
+    prev > 0 ? Math.round(((now - prev) / prev) * 100 * 10) / 10 : 0;
+
+  // Real growth: last 7 days vs previous 7 days — all from Shopify orders
+  const weeklyGrowthCalc = pct(last7Revenue, prev7Revenue);
+  const ordersGrowthCalc = pct(last7Orders.length, prev7Orders.length);
+
+  const last7Aov = last7Orders.length ? last7Revenue / last7Orders.length : 0;
+  const prev7Aov = prev7Orders.length ? prev7Revenue / prev7Orders.length : 0;
+  const aovGrowthCalc = pct(last7Aov, prev7Aov);
 
   // ─── Repeat purchase rate — customers with 2+ orders ─────────────
   const customerOrderCount: Record<string, number> = {};
@@ -222,6 +229,8 @@ function processOrders(orders: any[]): Partial<SalesData> & {
     lowProducts,
     revenueByDay,
     weeklyGrowthCalc,
+    ordersGrowthCalc,
+    aovGrowthCalc,
     repeatPurchaseRateCalc,
   };
 }
@@ -249,7 +258,7 @@ export async function getSalesData(): Promise<SalesData & { isLive: boolean; dat
     }
 
     const processed = processOrders(orders);
-    const { weeklyGrowthCalc, repeatPurchaseRateCalc, ...salesProcessed } = processed;
+    const { weeklyGrowthCalc, ordersGrowthCalc, aovGrowthCalc, repeatPurchaseRateCalc, ...salesProcessed } = processed;
 
     // ─── Real conversion rate from Shopify Analytics ──────────────
     // Shopify REST doesn't expose sessions directly.
@@ -281,6 +290,8 @@ export async function getSalesData(): Promise<SalesData & { isLive: boolean; dat
       conversionRate,
       repeatPurchaseRate: repeatPurchaseRateCalc || 33.36, // 33.36% verified from Shopify dashboard
       weeklyGrowth: weeklyGrowthCalc,
+      ordersGrowth: ordersGrowthCalc,
+      aovGrowth: aovGrowthCalc,
       recoveryOpportunity,
       insights: [],
       isLive: true,

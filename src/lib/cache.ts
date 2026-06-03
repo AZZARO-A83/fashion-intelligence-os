@@ -41,9 +41,11 @@ export async function getCachedReport<T = unknown>(
 }
 
 // Save a freshly generated report so the whole team can read it.
+// Optional ttlSeconds auto-expires it (e.g. dashboard insights every 6h).
 export async function setCachedReport<T = unknown>(
   key: string,
-  data: T
+  data: T,
+  ttlSeconds?: number
 ): Promise<void> {
   if (!redis) return;
   try {
@@ -51,11 +53,18 @@ export async function setCachedReport<T = unknown>(
       data,
       generatedAt: new Date().toISOString(),
     };
-    await redis.set(key, payload);
+    if (ttlSeconds) await redis.set(key, payload, { ex: ttlSeconds });
+    else await redis.set(key, payload);
   } catch (err) {
     console.error("[cache] write failed:", err);
     // swallow — a failed cache write must never block returning the report
   }
+}
+
+// True if an ISO timestamp is within the last `maxAgeSeconds`.
+export function isFresh(iso: string | null | undefined, maxAgeSeconds: number): boolean {
+  if (!iso) return false;
+  return Date.now() - new Date(iso).getTime() < maxAgeSeconds * 1000;
 }
 
 // Stable keys for each shareable report type.

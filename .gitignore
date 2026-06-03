@@ -24,3 +24,6 @@ prisma/migrations/
 # Logs
 *.log
 npm-debug.log*
+
+# graphify knowledge-graph artifacts
+graphify-out/
