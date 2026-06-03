@@ -259,12 +259,29 @@ function cairoYmdToUtc(ymd: string, endOfDay: boolean): Date {
 
 const REFUND_LOOKBACK_DAYS = 120; // fetch this far back so returns-by-refund-date catch older orders
 
+// Today's date as YYYY-MM-DD in Egypt time.
+function egyptTodayYmd(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
+// Subtract N days from a YYYY-MM-DD string (calendar-safe).
+function ymdMinusDays(ymd: string, days: number): string {
+  const d = new Date(ymd + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
 // Main entry point — returns data + honest live/mock status for a date window.
 export async function getSalesData(
   range?: SalesRange
 ): Promise<SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string }> {
-  const to = range?.toYmd ? cairoYmdToUtc(range.toYmd, true) : new Date();
-  const from = range?.fromYmd ? cairoYmdToUtc(range.fromYmd, false) : new Date(to.getTime() - 30 * 86400000);
+  // Default = Shopify "Last 30 days" = Egypt today−30 → today.
+  const toYmd = range?.toYmd ?? egyptTodayYmd();
+  const fromYmd = range?.fromYmd ?? ymdMinusDays(toYmd, 30);
+  const to = cairoYmdToUtc(toYmd, true);
+  const from = cairoYmdToUtc(fromYmd, false);
   const rangeMs = Math.max(86400000, to.getTime() - from.getTime());
   // Fetch back far enough to cover BOTH the prior period (growth) and old-order refunds.
   const fetchFrom = new Date(from.getTime() - Math.max(rangeMs, REFUND_LOOKBACK_DAYS * 86400000));

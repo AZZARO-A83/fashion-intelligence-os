@@ -36,9 +36,10 @@ export function DateRangePicker({ value, onChange }: Props) {
     const now = new Date();
     const today = ymd(now);
 
+    // Shopify-style: "Last N days" starts N days before today (so today−7 .. today).
     if (preset === "today") onChange({ from: today, to: today });
-    else if (preset === "7d") onChange({ from: ymd(new Date(now.getTime() - 6 * 86400000)), to: today });
-    else if (preset === "30d") onChange({ from: null, to: null }); // default
+    else if (preset === "7d") onChange({ from: ymd(new Date(now.getTime() - 7 * 86400000)), to: today });
+    else if (preset === "30d") onChange({ from: null, to: null }); // default (Egypt last 30 days)
     else if (preset === "month") onChange({ from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: today });
     // "custom" waits for the date inputs below
   };
