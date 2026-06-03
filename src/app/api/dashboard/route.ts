@@ -4,6 +4,10 @@ import { getSeasonalContext } from "@/lib/egyptian-context";
 import { analyzeSalesData } from "@/lib/claude";
 import { getCachedReport, setCachedReport, isFresh } from "@/lib/cache";
 
+// Always run fresh on the server — never serve a stale static snapshot.
+// Sales numbers are pulled live each load; only AI insights are cached (below).
+export const dynamic = "force-dynamic";
+
 const INSIGHTS_KEY = "dashboard:insights";
 const INSIGHTS_TTL = 6 * 60 * 60; // 6 hours — matches Shopify data cache
 
