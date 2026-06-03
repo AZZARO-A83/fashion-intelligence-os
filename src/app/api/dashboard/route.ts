@@ -9,7 +9,10 @@ import { getCachedReport, setCachedReport, isFresh } from "@/lib/cache";
 export const dynamic = "force-dynamic";
 
 const INSIGHTS_KEY = "dashboard:insights";
-const INSIGHTS_TTL = 6 * 60 * 60; // 6 hours — matches Shopify data cache
+const INSIGHTS_TTL = 6 * 60 * 60; // 6 hours
+const SALES_TTL = 15 * 60;        // 15 min — the heavy Shopify pull is cached this long
+
+type SalesResult = Awaited<ReturnType<typeof getSalesData>>;
 
 export async function GET(request: Request) {
   const now = new Date();
@@ -22,13 +25,20 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
-  const range = fromParam && toParam
-    ? { from: new Date(fromParam + "T00:00:00Z"), to: new Date(toParam + "T23:59:59Z") }
-    : undefined;
+  const range = fromParam && toParam ? { fromYmd: fromParam, toYmd: toParam } : undefined;
   const isDefaultRange = !range;
 
-  // 🟢 Real Shopify data for the selected window
-  const salesData = await getSalesData(range);
+  // 🟢 Real Shopify data for the selected window — cached 15 min so the heavy
+  // 120-day fetch (needed for exact returns) doesn't run on every page load.
+  const salesKey = `sales:${fromParam ?? "def"}:${toParam ?? "def"}`;
+  let salesData: SalesResult;
+  const cachedSales = await getCachedReport<SalesResult>(salesKey);
+  if (cachedSales && isFresh(cachedSales.generatedAt, SALES_TTL)) {
+    salesData = cachedSales.data;
+  } else {
+    salesData = await getSalesData(range);
+    if (salesData.isLive) await setCachedReport(salesKey, salesData, SALES_TTL);
+  }
   const { isLive } = salesData;
 
   // 🔵 AI insights — only for the DEFAULT 30-day view, cached 6h. Custom ranges

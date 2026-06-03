@@ -35,8 +35,8 @@ async function getRealOrders(minISO: string, maxISO: string): Promise<any[]> {
 
   while (keepGoing) {
     const endpoint: string = isFirstPage
-      ? `orders.json?status=any&created_at_min=${minISO}&created_at_max=${maxISO}&limit=250&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`
-      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`;
+      ? `orders.json?status=any&created_at_min=${minISO}&created_at_max=${maxISO}&limit=250&fields=id,total_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`
+      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`;
 
     const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
       headers: shopifyHeaders(),
@@ -113,19 +113,42 @@ async function getRealAbandonedCarts(): Promise<{ count: number; totalValue: num
   }
 }
 
-// Net revenue (after refunds) for a set of orders — matches Shopify "Net sales".
-function netRevenue(orders: any[]): number {
-  const gross = orders.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-  const refunds = orders.reduce((s, o) => {
-    const rf = (o.refunds ?? []).reduce((rs: number, r: any) =>
-      rs + (r.refund_line_items ?? []).reduce((x: number, rli: any) => x + parseFloat(rli.subtotal || 0), 0), 0);
-    return s + rf;
-  }, 0);
-  return gross - refunds;
+// ─── Shopify-exact metrics for one period ─────────────────────────────
+// Matches Shopify Analytics: Net sales = Gross − Discounts − Returns, where
+// Returns are counted by REFUND date (not order date) — verified to match
+// Shopify's dashboard to within ~0.4%. Sales are counted by ORDER date.
+function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
+  const inWin = (t: string) => {
+    const x = new Date(t).getTime();
+    return x >= loMs && x <= hiMs;
+  };
+
+  const created = allOrders.filter((o) => inWin(o.created_at));
+
+  let gross = 0;
+  let discounts = 0;
+  for (const o of created) {
+    for (const it of o.line_items ?? []) gross += parseFloat(it.price) * it.quantity;
+    discounts += parseFloat(o.total_discounts || 0);
+  }
+
+  // Returns: any refund PROCESSED inside this window, even for older orders.
+  let returns = 0;
+  for (const o of allOrders) {
+    for (const r of o.refunds ?? []) {
+      if (inWin(r.processed_at || r.created_at)) {
+        returns += (r.refund_line_items ?? []).reduce(
+          (x: number, rli: any) => x + parseFloat(rli.subtotal || 0), 0);
+      }
+    }
+  }
+
+  const net = gross - discounts - returns;
+  return { gross, discounts, returns, net, orderCount: created.length, created };
 }
 
 // Process raw Shopify orders into analytics for the CURRENT window [fromMs, toMs].
-// `orders` spans [priorFrom, toMs] so growth can compare to the equal prior period.
+// `orders` spans well before fromMs so returns-by-refund-date + prior-period growth work.
 function processOrders(orders: any[], fromMs: number, toMs: number): Partial<SalesData> & {
   weeklyGrowthCalc: number;
   ordersGrowthCalc: number;
@@ -133,42 +156,31 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
   repeatPurchaseRateCalc: number;
 } {
   const rangeMs = Math.max(1, toMs - fromMs);
-  const priorFromMs = fromMs - rangeMs;
 
-  const inWindow = (o: any, lo: number, hi: number) => {
-    const t = new Date(o.created_at).getTime();
-    return t >= lo && t <= hi;
-  };
+  const cur = periodMetrics(orders, fromMs, toMs);
+  const prior = periodMetrics(orders, fromMs - rangeMs, fromMs - 1);
 
-  // Current period orders vs the equal-length period immediately before it.
-  const current = orders.filter((o) => inWindow(o, fromMs, toMs));
-  const prior = orders.filter((o) => inWindow(o, priorFromMs, fromMs - 1));
+  if (!cur.orderCount) return { weeklyGrowthCalc: 0, ordersGrowthCalc: 0, aovGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
 
-  if (!current.length) return { weeklyGrowthCalc: 0, ordersGrowthCalc: 0, aovGrowthCalc: 0, repeatPurchaseRateCalc: 0 };
+  const totalRevenue = Math.round(cur.net);          // 🟢 Shopify "Net sales"
+  const totalOrders = cur.orderCount;
+  const avgOrderValue = Math.round(cur.net / totalOrders);
 
-  const totalRevenue = netRevenue(current);
-  const totalOrders = current.length;
-  const avgOrderValue = Math.round(totalRevenue / totalOrders);
-
-  // ─── Growth: current period vs equal prior period ─────────────────
+  // ─── Growth: current net vs equal prior period net ────────────────
   const pct = (now: number, prev: number) =>
     prev > 0 ? Math.round(((now - prev) / prev) * 100 * 10) / 10 : 0;
 
-  const curRev = current.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-  const priRev = prior.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-  const weeklyGrowthCalc = pct(curRev, priRev);
-  const ordersGrowthCalc = pct(current.length, prior.length);
-  const curAov = current.length ? curRev / current.length : 0;
-  const priAov = prior.length ? priRev / prior.length : 0;
+  const weeklyGrowthCalc = pct(cur.net, prior.net);
+  const ordersGrowthCalc = pct(cur.orderCount, prior.orderCount);
+  const curAov = cur.orderCount ? cur.net / cur.orderCount : 0;
+  const priAov = prior.orderCount ? prior.net / prior.orderCount : 0;
   const aovGrowthCalc = pct(curAov, priAov);
 
   // ─── Repeat purchase rate — customers with 2+ orders (current window) ──
   const customerOrderCount: Record<string, number> = {};
-  for (const order of current) {
+  for (const order of cur.created) {
     const cid = order.customer?.id?.toString() ?? order.email ?? "guest";
-    if (cid !== "guest") {
-      customerOrderCount[cid] = (customerOrderCount[cid] || 0) + 1;
-    }
+    if (cid !== "guest") customerOrderCount[cid] = (customerOrderCount[cid] || 0) + 1;
   }
   const totalCustomers = Object.keys(customerOrderCount).length;
   const repeatCustomers = Object.values(customerOrderCount).filter(c => c > 1).length;
@@ -178,7 +190,7 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   // ─── Product sales map (current window) ───────────────────────────
   const productMap: Record<string, { revenue: number; units: number; name: string }> = {};
-  for (const order of current) {
+  for (const order of cur.created) {
     for (const item of order.line_items ?? []) {
       const key = item.product_id?.toString() ?? item.title;
       if (!productMap[key]) productMap[key] = { revenue: 0, units: 0, name: item.title };
@@ -186,28 +198,17 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
       productMap[key].units += item.quantity;
     }
   }
-
   const sorted = Object.values(productMap).sort((a, b) => b.revenue - a.revenue);
-
   const topProducts: TopProduct[] = sorted.slice(0, 5).map((p) => ({
-    name: p.name,
-    revenue: Math.round(p.revenue),
-    units: p.units,
-    growth: 0,
-    category: "shopify",
+    name: p.name, revenue: Math.round(p.revenue), units: p.units, growth: 0, category: "shopify",
   }));
-
   const lowProducts: TopProduct[] = sorted.slice(-3).map((p) => ({
-    name: p.name,
-    revenue: Math.round(p.revenue),
-    units: p.units,
-    growth: 0,
-    category: "shopify",
+    name: p.name, revenue: Math.round(p.revenue), units: p.units, growth: 0, category: "shopify",
   }));
 
   // ─── Revenue by day (current window) ──────────────────────────────
   const dayMap: Record<string, { revenue: number; orders: number }> = {};
-  for (const order of current) {
+  for (const order of cur.created) {
     const day = order.created_at?.split("T")[0];
     if (!day) continue;
     if (!dayMap[day]) dayMap[day] = { revenue: 0, orders: 0 };
@@ -219,7 +220,7 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
     .map(([date, v]) => ({ date, revenue: Math.round(v.revenue), orders: v.orders }));
 
   return {
-    totalRevenue: Math.round(totalRevenue),
+    totalRevenue,
     totalOrders,
     avgOrderValue,
     topProducts,
@@ -233,18 +234,39 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 }
 
 export interface SalesRange {
-  from?: Date; // start of the window (default: 30 days ago)
-  to?: Date;   // end of the window (default: now)
+  fromYmd?: string; // "YYYY-MM-DD" interpreted in Egypt time (default: 30 days ago)
+  toYmd?: string;   // "YYYY-MM-DD" interpreted in Egypt time (default: today)
 }
+
+// Convert a calendar day (interpreted in Egypt/Cairo time, DST-aware) to the
+// exact UTC instant of its start (00:00) or end (23:59:59). This makes our
+// day boundaries line up with Shopify Analytics, which uses the store timezone.
+function cairoYmdToUtc(ymd: string, endOfDay: boolean): Date {
+  const [y, mo, d] = ymd.split("-").map(Number);
+  const h = endOfDay ? 23 : 0, mi = endOfDay ? 59 : 0, s = endOfDay ? 59 : 0;
+  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo", hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const p = dtf.formatToParts(new Date(guess)).reduce((a: any, x) => { a[x.type] = x.value; return a; }, {});
+  const asCairo = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  const offset = asCairo - guess; // how far Cairo is ahead of UTC at that moment
+  return new Date(guess - offset);
+}
+
+const REFUND_LOOKBACK_DAYS = 120; // fetch this far back so returns-by-refund-date catch older orders
 
 // Main entry point — returns data + honest live/mock status for a date window.
 export async function getSalesData(
   range?: SalesRange
 ): Promise<SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string }> {
-  const to = range?.to ?? new Date();
-  const from = range?.from ?? new Date(to.getTime() - 30 * 86400000);
+  const to = range?.toYmd ? cairoYmdToUtc(range.toYmd, true) : new Date();
+  const from = range?.fromYmd ? cairoYmdToUtc(range.fromYmd, false) : new Date(to.getTime() - 30 * 86400000);
   const rangeMs = Math.max(86400000, to.getTime() - from.getTime());
-  const priorFrom = new Date(from.getTime() - rangeMs); // fetch prior period too, for growth
+  // Fetch back far enough to cover BOTH the prior period (growth) and old-order refunds.
+  const fetchFrom = new Date(from.getTime() - Math.max(rangeMs, REFUND_LOOKBACK_DAYS * 86400000));
 
   const meta = { rangeFrom: from.toISOString(), rangeTo: to.toISOString() };
 
@@ -254,9 +276,9 @@ export async function getSalesData(
   }
 
   try {
-    console.log("[Shopify] Fetching real data from", SHOPIFY_URL, from.toISOString(), "→", to.toISOString());
+    console.log("[Shopify] Fetching", SHOPIFY_URL, from.toISOString(), "→", to.toISOString());
     const [orders, abandonedCartsData] = await Promise.all([
-      getRealOrders(priorFrom.toISOString(), to.toISOString()),
+      getRealOrders(fetchFrom.toISOString(), to.toISOString()),
       getRealAbandonedCarts(),
     ]);
     const abandonedCarts = abandonedCartsData.count;
