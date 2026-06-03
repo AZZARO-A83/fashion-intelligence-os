@@ -1,47 +1,32 @@
 import { NextResponse } from "next/server";
-import { runTrendScan } from "@/lib/trend-scanner";
-import { getAlerts, getLastScan, updateAlertStatus } from "@/lib/trend-alerts";
+import { generateLiveAlerts } from "@/lib/live-research";
+import { getCachedReport, setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
-// GET — return current alerts + last scan info
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const action = searchParams.get("action");
+export const maxDuration = 60;
 
-  if (action === "dismiss") {
-    const id = searchParams.get("id");
-    if (id) updateAlertStatus(id, "dismissed");
-    return NextResponse.json({ ok: true });
-  }
-
-  if (action === "action") {
-    const id = searchParams.get("id");
-    if (id) updateAlertStatus(id, "actioned");
-    return NextResponse.json({ ok: true });
-  }
-
-  const alerts = getAlerts();
-  const lastScan = getLastScan();
-  const newAlerts = alerts.filter(a => a.status === "new").length;
-  const urgentAlerts = alerts.filter(a => a.priority === "urgent" && a.status === "new").length;
-
+// GET — return last live-generated alerts + sources (cached, no tokens).
+export async function GET() {
+  const cached = await getCachedReport<{ alerts: any[]; sources: any[] }>(CACHE_KEYS.alerts);
+  const alerts = cached?.data?.alerts ?? [];
   return NextResponse.json({
     alerts,
-    lastScan,
-    newAlerts,
-    urgentAlerts,
+    sources: cached?.data?.sources ?? [],
+    generatedAt: cached?.generatedAt ?? null,
+    newAlerts: alerts.filter((a) => a.status === "new").length,
+    urgentAlerts: alerts.filter((a) => a.priority === "urgent").length,
     totalAlerts: alerts.length,
   });
 }
 
-// POST — trigger a new scan
+// POST — run a live scan (Tavily + Groq), cache, return.
 export async function POST() {
   try {
-    const result = await runTrendScan();
-    return NextResponse.json({ result, success: true });
+    const result = await generateLiveAlerts();
+    await setCachedReport(CACHE_KEYS.alerts, result);
+    return NextResponse.json({ ...result, generatedAt: new Date().toISOString(), success: true });
   } catch (err: any) {
-    console.error("[Scan API] Error:", err);
     return NextResponse.json(
-      { error: err.message ?? "Scan failed" },
+      { error: "Scan failed", details: err?.message ?? "Unknown error" },
       { status: 500 }
     );
   }

@@ -178,6 +178,119 @@ Cover Tie House, British House, Massimo Dutti Egypt, plus any other premium Egyp
   return { competitors: competitorsOut, marketGaps: raw.marketGaps ?? [], sources };
 }
 
+// ─── LIVE TREND ALERTS ────────────────────────────────────────────────
+import { TrendAlert } from "./trend-alerts";
+
+export interface LiveAlertsResult {
+  alerts: TrendAlert[];
+  sources: Source[];
+}
+
+export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
+  const [trends, market, sources] = await Promise.all([
+    searchEgyptianFashionTrends(),
+    searchMarketIntelligence(),
+    collectSources([
+      { q: "Egyptian fashion trend rising fast 2026 viral مصر", days: 7 },
+      { q: "Egypt fashion market news 2026", days: 14, topic: "news" },
+    ]),
+  ]);
+
+  const prompt = `You are a trend-alert system for DEBACKERS Egypt. From the LIVE search below, surface the 4 FASTEST-RISING trends that need action now.
+
+=== LIVE SEARCH ===
+${trends}
+
+${market}
+=== END ===
+
+Return ONLY a JSON array of 4 alerts:
+[{
+  "trendName":"", "arabicName":"", "platform":"tiktok|instagram|multi", "category":"aesthetic|color|style|product|occasion",
+  "currentScore":85, "growthRate":40, "priority":"urgent|high|medium|watch",
+  "signals":["data point from the search"], "relevanceToDebackers":"why it matters",
+  "suggestedAction":"specific move", "hook":"Arabic hook", "hashtags":["#tag"], "peakDaysEstimate":10
+}]
+Base it on the real search signals. Return ONLY the JSON array.`;
+
+  const text = await callClaude(buildSystemPrompt(), prompt, 3500);
+  const raw = parseJson<any[]>(text);
+  const now = new Date().toISOString();
+  const alerts: TrendAlert[] = raw.map((a, i) => ({
+    id: `alert-${i}`,
+    detectedAt: now,
+    trendName: a.trendName || "Trend",
+    arabicName: a.arabicName || "",
+    platform: a.platform || "multi",
+    category: a.category || "style",
+    currentScore: Number(a.currentScore) || 0,
+    previousScore: 0,
+    scoreChange: Number(a.growthRate) || 0,
+    growthRate: Number(a.growthRate) || 0,
+    priority: a.priority || "medium",
+    status: "new",
+    source: "live web search",
+    signals: Array.isArray(a.signals) ? a.signals : [],
+    relevanceToDebackers: a.relevanceToDebackers || "",
+    suggestedAction: a.suggestedAction || "",
+    hook: a.hook || "",
+    hashtags: Array.isArray(a.hashtags) ? a.hashtags : [],
+    peakDaysEstimate: Number(a.peakDaysEstimate) || 0,
+    isNew: true,
+  }));
+  return { alerts, sources };
+}
+
+// ─── LIVE INSPIRATION ─────────────────────────────────────────────────
+export interface InspirationItem {
+  title: string;
+  description: string;
+  colors: string[];        // hex codes
+  mood: string;
+  useFor: string;          // which Debackers products/campaigns
+}
+export interface LiveInspirationResult {
+  boards: InspirationItem[];
+  sources: Source[];
+}
+
+export async function generateLiveInspiration(): Promise<LiveInspirationResult> {
+  const [trends, sources] = await Promise.all([
+    searchEgyptianFashionTrends(),
+    collectSources([
+      { q: "fashion color palette mood board 2026 trend", days: 30 },
+      { q: "Egypt summer fashion aesthetic 2026 visual style", days: 30 },
+    ]),
+  ]);
+
+  const prompt = `You are a creative director for DEBACKERS Egypt. From the LIVE trend search below, propose 4 visual mood boards for upcoming content.
+
+=== LIVE TRENDS ===
+${trends}
+=== END ===
+
+Return ONLY a JSON array of 4 boards:
+[{
+  "title":"Board name",
+  "description":"the visual direction in 1-2 sentences",
+  "colors":["#hex1","#hex2","#hex3","#hex4"],
+  "mood":"e.g. warm minimalist editorial",
+  "useFor":"which Debackers products/campaigns this fits"
+}]
+Use real hex color codes. Return ONLY the JSON array.`;
+
+  const text = await callClaude(buildSystemPrompt(), prompt, 2500);
+  const raw = parseJson<any[]>(text);
+  const boards: InspirationItem[] = raw.map((b) => ({
+    title: b.title || "Mood board",
+    description: b.description || "",
+    colors: Array.isArray(b.colors) ? b.colors : [],
+    mood: b.mood || "",
+    useFor: b.useFor || "",
+  }));
+  return { boards, sources };
+}
+
 // ─── LIVE CAMPAIGNS ───────────────────────────────────────────────────
 export interface LiveCampaign {
   name: string;

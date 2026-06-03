@@ -34,6 +34,7 @@ export async function tavilySearch(
     searchDepth?: "basic" | "advanced";
     includeAnswer?: boolean;
     days?: number; // how recent (days)
+    topic?: "general" | "news"; // "news" → dated articles from publishers
   } = {}
 ): Promise<{ results: TavilyResult[]; answer?: string; error?: string }> {
   if (!TAVILY_API_KEY) {
@@ -53,6 +54,7 @@ export async function tavilySearch(
         search_depth: options.searchDepth ?? "basic",
         include_answer: options.includeAnswer ?? false,
         days: options.days ?? 7,
+        topic: options.topic ?? "general",
         include_domains: [],
         exclude_domains: [],
       }),
@@ -103,11 +105,16 @@ export interface Source {
 }
 
 export async function collectSources(
-  queries: { q: string; days?: number }[]
+  queries: { q: string; days?: number; topic?: "general" | "news" }[]
 ): Promise<Source[]> {
+  // Advanced depth = higher-quality, more authoritative results. We also run a
+  // NEWS pass so the user gets dated articles from real publishers, not just
+  // generic discovery pages.
   const runs = await Promise.all(
-    queries.map(({ q, days }) =>
-      withTimeout(tavilySearch(q, { days: days ?? 14, maxResults: 4 }), 8000, FALLBACK))
+    queries.flatMap(({ q, days, topic }) => [
+      withTimeout(tavilySearch(q, { days: days ?? 21, maxResults: 4, searchDepth: "advanced", topic: topic ?? "general" }), 9000, FALLBACK),
+      withTimeout(tavilySearch(q, { days: days ?? 30, maxResults: 3, searchDepth: "advanced", topic: "news" }), 9000, FALLBACK),
+    ])
   );
   const seen = new Set<string>();
   const sources: Source[] = [];
@@ -119,8 +126,11 @@ export async function collectSources(
       }
     }
   }
-  // Strongest signals first
-  return sources.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  // Dated sources (real articles/posts) first, then by relevance.
+  return sources.sort((a, b) => {
+    if (!!a.date !== !!b.date) return a.date ? -1 : 1;
+    return (b.score ?? 0) - (a.score ?? 0);
+  });
 }
 
 // ─── Specialized searches for Egyptian fashion market ─────────────────

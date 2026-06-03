@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { Badge } from "@/components/ui/badge";
-import { cn, platformIcon, platformColor } from "@/lib/utils";
+import { cn, platformIcon, platformColor, timeAgo } from "@/lib/utils";
 import { TrendAlert, TrendScanResult, AlertStatus } from "@/lib/trend-alerts";
+import { Sources, type Source } from "@/components/ui/sources";
+import { GenerationError } from "@/components/ui/generation-error";
 import {
   Bell, Zap, TrendingUp, Clock, RefreshCw,
   CheckCheck, X, Eye, Sparkles, Hash,
@@ -206,20 +208,33 @@ export default function TrendAlertsPage() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [filter, setFilter] = useState<"all" | "new" | "urgent">("new");
+  const [sources, setSources] = useState<Source[]>([]);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = () => {
     fetch("/api/trends/scan")
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); });
+      .then(d => { setData(d); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); setLoading(false); });
   };
 
   useEffect(() => { load(); }, []);
 
   const handleScan = async () => {
     setScanning(true);
-    await fetch("/api/trends/scan", { method: "POST" });
-    await load();
-    setScanning(false);
+    setError(null);
+    try {
+      const res = await fetch("/api/trends/scan", { method: "POST" });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(`Scan failed: ${e.details || res.status}`);
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
   };
 
   const handleAction = async (id: string) => {
@@ -265,6 +280,14 @@ export default function TrendAlertsPage() {
       />
 
       <div className="p-8 space-y-6">
+
+        {generatedAt && (
+          <p className="text-xs text-muted">🔄 Last scanned {timeAgo(generatedAt)} · live web search · shared with your team</p>
+        )}
+
+        {error && <GenerationError error={error} />}
+
+        {alerts.length > 0 && <Sources sources={sources} />}
 
         {/* How it works */}
         <div className="bg-surface border border-border/50 rounded-xl p-4">

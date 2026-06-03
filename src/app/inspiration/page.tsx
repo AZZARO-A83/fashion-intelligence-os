@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { ImageReference } from "@/types";
-import { Palette, Tag, Info } from "lucide-react";
+import { Sources, type Source } from "@/components/ui/sources";
+import { GenerationError } from "@/components/ui/generation-error";
+import { Palette, Tag, Info, RefreshCw, Sparkles } from "lucide-react";
+
+interface MoodBoard {
+  title: string;
+  description: string;
+  colors: string[];
+  mood: string;
+  useFor: string;
+}
 
 // Curated Unsplash images for Egyptian fashion campaigns
 const IMAGE_LIBRARY: (ImageReference & { id: string; campaignHint: string })[] = [
@@ -236,6 +246,35 @@ export default function InspirationPage() {
   const [selected, setSelected] = useState<typeof IMAGE_LIBRARY[0] | null>(null);
   const [search, setSearch] = useState("");
 
+  // Live mood boards (real colors + direction from live trends + sources)
+  const [boards, setBoards] = useState<MoodBoard[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/inspiration")
+      .then((r) => r.json())
+      .then((d) => { if (d.boards?.length) { setBoards(d.boards); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); } })
+      .catch(() => {});
+  }, []);
+
+  const generateBoards = async () => {
+    setGenLoading(true);
+    setGenError(null);
+    try {
+      const res = await fetch("/api/inspiration", { method: "POST" });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(`Generation failed: ${e.details || res.status}`); }
+      const d = await res.json();
+      setBoards(d.boards); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
   const filtered = IMAGE_LIBRARY.filter((img) => {
     const matchesFilter = filter === "all" || img.category === filter;
     const matchesSearch = !search || img.tags.some((t) => t.includes(search.toLowerCase())) || img.style.toLowerCase().includes(search.toLowerCase());
@@ -246,11 +285,70 @@ export default function InspirationPage() {
     <div className="min-h-screen">
       <PageHeader
         title="Visual Inspiration Library"
-        subtitle="Campaign image references, mood boards, and styling examples"
-        badge="Curated"
+        subtitle="Live mood boards from current trends + a curated reference library"
+        badge="🟢 Live boards"
+        action={
+          <button
+            onClick={generateBoards}
+            disabled={genLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-accent text-black rounded-lg font-semibold text-sm hover:bg-accent/90 disabled:opacity-50 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${genLoading ? "animate-spin" : ""}`} />
+            {genLoading ? "Creating live…" : boards.length ? "Refresh boards" : "Generate live boards"}
+          </button>
+        }
       />
 
       <div className="p-8 space-y-6">
+
+        {/* LIVE Mood Boards */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-accent" />
+            <h2 className="text-sm font-semibold text-foreground">Live Mood Boards</h2>
+            {generatedAt && <span className="text-xs text-muted">· {timeAgo(generatedAt)}</span>}
+          </div>
+
+          {genError && <GenerationError error={genError} />}
+
+          {!boards.length && !genLoading && !genError && (
+            <div className="bg-surface border border-dashed border-border rounded-xl p-8 text-center">
+              <Palette className="w-10 h-10 text-accent mx-auto mb-3 opacity-50" />
+              <p className="text-sm text-foreground font-medium mb-1">No live boards yet</p>
+              <p className="text-xs text-muted">Click <strong>Generate live boards</strong> — AI builds mood boards from current trends, with sources.</p>
+            </div>
+          )}
+
+          {genLoading && (
+            <div className="bg-surface border border-border rounded-xl p-8 text-center">
+              <RefreshCw className="w-5 h-5 text-accent animate-spin mx-auto mb-2" />
+              <p className="text-sm text-foreground">Searching live trends &amp; building boards…</p>
+            </div>
+          )}
+
+          {boards.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                {boards.map((b, i) => (
+                  <div key={i} className="bg-surface border border-border/50 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-bold text-foreground">{b.title}</h3>
+                      <span className="text-[10px] text-muted">{b.mood}</span>
+                    </div>
+                    <div className="flex rounded-lg overflow-hidden h-9 mb-3">
+                      {b.colors.map((c, j) => (
+                        <div key={j} className="flex-1 hover:flex-[2] transition-all" style={{ backgroundColor: c }} title={c} />
+                      ))}
+                    </div>
+                    <p className="text-xs text-foreground-muted leading-relaxed mb-2">{b.description}</p>
+                    <p className="text-[10px] text-accent">For: {b.useFor}</p>
+                  </div>
+                ))}
+              </div>
+              <Sources sources={sources} />
+            </>
+          )}
+        </div>
 
         {/* Color Palettes */}
         <div className="bg-surface border border-border/50 rounded-xl p-5">

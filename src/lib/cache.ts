@@ -76,4 +76,6 @@ export const CACHE_KEYS = {
   trends: "live:trends:latest",
   competitors: "live:competitors:latest",
   campaigns: "live:campaigns:latest",
+  alerts: "live:alerts:latest",
+  inspiration: "live:inspiration:latest",
 } as const;
