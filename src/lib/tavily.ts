@@ -70,10 +70,24 @@ export async function tavilySearch(
 }
 
 // ─── Format results for AI prompt ────────────────────────────────────
+// Truncates each result's content to keep total tokens under Groq's 12k/min
+// limit WITHOUT dropping any source. Every search, every URL, and the lead
+// fact (always at the top of a Tavily blurb) are preserved — only the
+// fluffy tail of each blurb is trimmed. Free, no crash, sources stay honest.
+const MAX_CONTENT_CHARS = 350;
+
+function truncateContent(content: string): string {
+  if (!content || content.length <= MAX_CONTENT_CHARS) return content;
+  // Cut at the last sentence boundary before the limit, so we never end mid-word.
+  const slice = content.slice(0, MAX_CONTENT_CHARS);
+  const lastStop = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "));
+  return (lastStop > 200 ? slice.slice(0, lastStop + 1) : slice).trim() + " …";
+}
+
 function formatResults(results: TavilyResult[]): string {
   if (!results.length) return "No results found.";
   return results
-    .map((r, i) => `[${i + 1}] ${r.title}\n${r.content}\nSource: ${r.url}`)
+    .map((r, i) => `[${i + 1}] ${r.title}\n${truncateContent(r.content)}\nSource: ${r.url}`)
     .join("\n\n");
 }
 

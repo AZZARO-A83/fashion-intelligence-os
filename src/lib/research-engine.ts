@@ -210,7 +210,7 @@ Return ONLY valid JSON:
   "metaAdsNote": "Meta Ads integration coming soon — real campaign performance, ROAS, and audience data will appear here once connected."
 }`;
 
-  const text = await callClaude(buildSystemPrompt(), prompt, 4000);
+  const text = await callClaude(buildSystemPrompt(), prompt, 3500);
 
   try {
     const data = JSON.parse(text);
