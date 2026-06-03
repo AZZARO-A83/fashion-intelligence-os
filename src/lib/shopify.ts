@@ -36,8 +36,8 @@ async function getRealOrders(): Promise<any[]> {
 
   while (keepGoing) {
     const endpoint: string = isFirstPage
-      ? `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status,refunds`
-      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status,refunds`;
+      ? `orders.json?status=any&created_at_min=${since}&limit=250&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`
+      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,line_items,created_at,financial_status,refunds,customer,email`;
 
     const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/${endpoint}`, {
       headers: shopifyHeaders(),
@@ -288,7 +288,7 @@ export async function getSalesData(): Promise<SalesData & { isLive: boolean; dat
       ...salesProcessed,
       abandonedCarts,
       conversionRate,
-      repeatPurchaseRate: repeatPurchaseRateCalc || 33.36, // 33.36% verified from Shopify dashboard
+      repeatPurchaseRate: repeatPurchaseRateCalc, // 🟢 real — computed from customer order counts
       weeklyGrowth: weeklyGrowthCalc,
       ordersGrowth: ordersGrowthCalc,
       aovGrowth: aovGrowthCalc,

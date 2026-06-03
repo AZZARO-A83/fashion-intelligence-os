@@ -43,9 +43,9 @@ export async function GET() {
       ordersGrowth: salesData.ordersGrowth ?? 0,   // 🟢 real, calculated from Shopify
       avgOrderValue: salesData.avgOrderValue,
       aovGrowth: salesData.aovGrowth ?? 0,          // 🟢 real, calculated from Shopify
-      repeatPurchaseRate: salesData.repeatPurchaseRate, // 🟢 live repeat-buyer %
-      conversionRate: salesData.conversionRate,
-      abandonedCarts: salesData.abandonedCarts,         // 🟢 live abandoned checkouts
+      repeatPurchaseRate: salesData.repeatPurchaseRate,        // 🟢 live repeat-buyer %
+      abandonedCarts: salesData.abandonedCarts,                // 🟢 live abandoned checkouts
+      recoveryOpportunity: salesData.recoveryOpportunity ?? 0, // 🟢 live recoverable EGP
     },
     isLive,
     seasonalContext,

@@ -33,8 +33,8 @@ interface DashboardData {
     avgOrderValue: number;
     aovGrowth: number;
     repeatPurchaseRate: number;
-    conversionRate: number;
     abandonedCarts: number;
+    recoveryOpportunity: number;
   };
   isLive: boolean;
   seasonalContext: {
@@ -267,16 +267,16 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
-                <span className="text-sm text-foreground-muted">Conversion rate</span>
-                <span className="text-sm font-semibold text-foreground">{stats.conversionRate}%</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
                 <span className="text-sm text-foreground-muted">Repeat buyers</span>
                 <span className="text-sm font-semibold text-foreground">{stats.repeatPurchaseRate}%</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
                 <span className="text-sm text-foreground-muted">Abandoned carts (30d)</span>
                 <span className="text-sm font-semibold text-foreground">{stats.abandonedCarts}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-surface-2 rounded-lg">
+                <span className="text-sm text-foreground-muted">Recovery opportunity</span>
+                <span className="text-sm font-semibold text-foreground">{formatCurrency(stats.recoveryOpportunity)}</span>
               </div>
             </div>
             <Link href="/sales" className="flex items-center gap-1 text-xs text-accent mt-4 hover:underline">
