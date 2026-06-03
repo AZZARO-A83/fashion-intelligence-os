@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { Badge } from "@/components/ui/badge";
-import { RICH_TRENDS, RichTrend, TrendSignal } from "@/lib/trend-engine";
-import { cn, platformIcon, platformColor } from "@/lib/utils";
+import { RichTrend, TrendSignal } from "@/lib/trend-engine";
+import { GenerationError } from "@/components/ui/generation-error";
+import { cn, platformIcon, platformColor, timeAgo } from "@/lib/utils";
 import {
   TrendingUp, Clock, Hash, Music, ChevronDown, ChevronRight,
-  AlertCircle, BarChart3, ShoppingBag, Users, Zap, Filter,
+  AlertCircle, BarChart3, ShoppingBag, Users, Zap, Filter, RefreshCw,
 } from "lucide-react";
 
 const URGENCY_STYLES = {
@@ -238,30 +239,95 @@ function TrendCard({ trend }: { trend: RichTrend }) {
 
 export default function TrendsPage() {
   const [filter, setFilter] = useState<string>("all");
+  const [trends, setTrends] = useState<RichTrend[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+
+  // Load the last live-generated trends (shared, no tokens).
+  useEffect(() => {
+    fetch("/api/trends")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.trends?.length) { setTrends(d.trends); setGeneratedAt(d.generatedAt); }
+      })
+      .catch(() => {});
+  }, []);
+
+  const generate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/trends", { method: "POST" });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(`Generation failed: ${e.details || res.status}`);
+      }
+      const d = await res.json();
+      setTrends(d.trends);
+      setGeneratedAt(d.generatedAt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filters = ["all", "act-now", "prepare", "monitor"];
   const filtered = filter === "all"
-    ? RICH_TRENDS
-    : RICH_TRENDS.filter((t) => t.catalogMatch.urgency === filter);
+    ? trends
+    : trends.filter((t) => t.catalogMatch?.urgency === filter);
 
-  const actNow = RICH_TRENDS.filter((t) => t.catalogMatch.urgency === "act-now");
-  const avgScore = Math.round(RICH_TRENDS.reduce((s, t) => s + t.trendScore, 0) / RICH_TRENDS.length);
+  const actNow = trends.filter((t) => t.catalogMatch?.urgency === "act-now");
+  const avgScore = trends.length ? Math.round(trends.reduce((s, t) => s + t.trendScore, 0) / trends.length) : 0;
 
   return (
     <div className="min-h-screen">
       <PageHeader
         title="Trend Intelligence Engine"
-        subtitle="Full methodology — every score explained with sources and signals"
-        badge="Live Tracking"
+        subtitle="Live web research — real Egyptian fashion trends right now"
+        badge="🟢 Live"
+        action={
+          <button
+            onClick={generate}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-accent text-black rounded-lg font-semibold text-sm hover:bg-accent/90 disabled:opacity-50 transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            {loading ? "Researching live…" : trends.length ? "Refresh trends" : "Scan live trends"}
+          </button>
+        }
       />
 
       <div className="p-8 space-y-6">
 
+        {generatedAt && (
+          <p className="text-xs text-muted">🔄 Last scanned {timeAgo(generatedAt)} · live web search · shared with your team</p>
+        )}
+
+        {error && <GenerationError error={error} />}
+
+        {!trends.length && !loading && !error && (
+          <div className="bg-surface border border-dashed border-border rounded-xl p-12 text-center">
+            <TrendingUp className="w-12 h-12 text-accent mx-auto mb-4 opacity-50" />
+            <p className="text-foreground font-semibold mb-2">No trends scanned yet</p>
+            <p className="text-sm text-muted mb-6">Click <strong>Scan live trends</strong> — AI searches the live web for what&apos;s trending in Egyptian fashion right now.</p>
+          </div>
+        )}
+
+        {loading && (
+          <div className="bg-surface border border-border rounded-xl p-12 text-center">
+            <RefreshCw className="w-6 h-6 text-accent animate-spin mx-auto mb-3" />
+            <p className="text-foreground font-semibold">Searching live web for Egyptian fashion trends…</p>
+          </div>
+        )}
+
         {/* Stats */}
+        {trends.length > 0 && (
         <div className="grid grid-cols-4 gap-4">
           <div className="bg-surface border border-border/50 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{RICH_TRENDS.length}</p>
-            <p className="text-xs text-muted mt-1">Trends Tracked</p>
+            <p className="text-2xl font-bold text-foreground">{trends.length}</p>
+            <p className="text-xs text-muted mt-1">Trends Found</p>
           </div>
           <div className="bg-surface border border-border/50 rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-red-400">{actNow.length}</p>
@@ -273,9 +339,10 @@ export default function TrendsPage() {
           </div>
           <div className="bg-surface border border-border/50 rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-accent">Live</p>
-            <p className="text-xs text-muted mt-1">Signal Sources</p>
+            <p className="text-xs text-muted mt-1">Web Search</p>
           </div>
         </div>
+        )}
 
         {/* Methodology Note */}
         <div className="bg-surface border border-border/50 rounded-xl p-4">

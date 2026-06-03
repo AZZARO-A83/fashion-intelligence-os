@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
-import { RICH_TRENDS, buildTrendsSummary } from "@/lib/trend-engine";
+import { generateLiveTrends } from "@/lib/live-research";
+import { getCachedReport, setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const summary = searchParams.get("summary") === "true";
+export const maxDuration = 60;
 
-  if (summary) {
-    return NextResponse.json({ summary: buildTrendsSummary() });
+// GET — return the last generated live trends (cached, no tokens).
+export async function GET() {
+  const cached = await getCachedReport(CACHE_KEYS.trends);
+  return NextResponse.json({
+    trends: cached?.data ?? [],
+    generatedAt: cached?.generatedAt ?? null,
+  });
+}
+
+// POST — run live Tavily + Groq, cache, return.
+export async function POST() {
+  try {
+    const trends = await generateLiveTrends();
+    await setCachedReport(CACHE_KEYS.trends, trends);
+    return NextResponse.json({ trends, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    return NextResponse.json(
+      { error: "Failed to generate trends", details: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
   }
-
-  const sorted = [...RICH_TRENDS].sort((a, b) => b.trendScore - a.trendScore);
-  return NextResponse.json({ trends: sorted, count: sorted.length });
 }

@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
-import { ScoreRing } from "@/components/ui/score-ring";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { CompetitorIntelligence } from "@/lib/competitor-intelligence";
+import { GenerationError } from "@/components/ui/generation-error";
 import {
-  ExternalLink, TrendingUp, TrendingDown, Users,
-  Hash, Eye, AlertCircle, Plus, Instagram, Globe,
-  Play, Megaphone, ShoppingBag, ChevronDown, ChevronRight
+  ExternalLink, TrendingUp, Users,
+  Eye, Instagram, Globe,
+  Play, Megaphone, ShoppingBag, ChevronDown, ChevronRight, RefreshCw
 } from "lucide-react";
 
 // Meta Ad Library direct links per competitor
@@ -207,22 +206,38 @@ function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) 
 }
 
 export default function CompetitorsPage() {
-  const [data, setData] = useState<{ competitors: CompetitorIntelligence[]; marketGaps: string[]; brand: any } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<{ competitors: CompetitorIntelligence[]; marketGaps: string[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/competitors")
       .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); });
+      .then((d) => {
+        if (d.competitors?.length) { setData(d); setGeneratedAt(d.generatedAt); }
+      })
+      .catch(() => {});
   }, []);
 
-  if (loading) {
-    return (
-      <div className="p-8 grid grid-cols-3 gap-4">
-        {[...Array(3)].map((_, i) => <div key={i} className="h-96 bg-surface rounded-xl animate-pulse" />)}
-      </div>
-    );
-  }
+  const generate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/competitors", { method: "POST" });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(`Research failed: ${e.details || res.status}`);
+      }
+      const d = await res.json();
+      setData(d);
+      setGeneratedAt(d.generatedAt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const { competitors = [], marketGaps = [] } = data ?? {};
 
@@ -230,23 +245,42 @@ export default function CompetitorsPage() {
     <div className="min-h-screen">
       <PageHeader
         title="Competitor Intelligence"
-        subtitle="Tie House · British House · Massimo Dutti — live research & gap analysis"
-        badge="Live Data"
+        subtitle="Live web research — what your competitors are doing right now"
+        badge="🟢 Live"
         action={
-          <a
-            href="https://www.facebook.com/ads/library/?country=EG&ad_type=all"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-500/20 transition-colors"
+          <button
+            onClick={generate}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-accent text-black rounded-lg font-semibold text-sm hover:bg-accent/90 disabled:opacity-50 transition-all"
           >
-            <Megaphone className="w-4 h-4" />
-            Meta Ad Library Egypt
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            {loading ? "Researching live…" : competitors.length ? "Refresh research" : "Research competitors"}
+          </button>
         }
       />
 
       <div className="p-8 space-y-6">
+
+        {generatedAt && (
+          <p className="text-xs text-muted">🔄 Last researched {timeAgo(generatedAt)} · live web search · shared with your team</p>
+        )}
+
+        {error && <GenerationError error={error} />}
+
+        {!competitors.length && !loading && !error && (
+          <div className="bg-surface border border-dashed border-border rounded-xl p-12 text-center">
+            <Users className="w-12 h-12 text-accent mx-auto mb-4 opacity-50" />
+            <p className="text-foreground font-semibold mb-2">No competitor research yet</p>
+            <p className="text-sm text-muted mb-6">Click <strong>Research competitors</strong> — AI searches the live web for what Tie House, British House &amp; Massimo Dutti are doing right now.</p>
+          </div>
+        )}
+
+        {loading && (
+          <div className="bg-surface border border-border rounded-xl p-12 text-center">
+            <RefreshCw className="w-6 h-6 text-accent animate-spin mx-auto mb-3" />
+            <p className="text-foreground font-semibold">Searching the live web for competitor activity…</p>
+          </div>
+        )}
 
         {/* How to use Ad Library */}
         <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-4">

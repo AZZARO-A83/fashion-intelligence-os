@@ -1,20 +1,29 @@
 import { NextResponse } from "next/server";
-import { COMPETITOR_DATABASE, DEBACKERS_PROFILE, analyzeMarketGaps } from "@/lib/competitor-intelligence";
+import { generateLiveCompetitors } from "@/lib/live-research";
+import { getCachedReport, setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
+export const maxDuration = 60;
+
+// GET — return last live-generated competitor intel (cached, no tokens).
 export async function GET() {
-  const marketGaps = await analyzeMarketGaps();
-
+  const cached = await getCachedReport<{ competitors: unknown[]; marketGaps: string[] }>(CACHE_KEYS.competitors);
   return NextResponse.json({
-    brand: DEBACKERS_PROFILE,
-    competitors: COMPETITOR_DATABASE,
-    marketGaps,
-    lastUpdated: new Date().toISOString(),
+    competitors: cached?.data?.competitors ?? [],
+    marketGaps: cached?.data?.marketGaps ?? [],
+    generatedAt: cached?.generatedAt ?? null,
   });
 }
 
-export async function POST(request: Request) {
-  const body = await request.json();
-  return NextResponse.json({
-    competitor: { id: `c-${Date.now()}`, ...body, snapshot: null },
-  }, { status: 201 });
+// POST — run live Tavily + Groq, cache, return.
+export async function POST() {
+  try {
+    const report = await generateLiveCompetitors();
+    await setCachedReport(CACHE_KEYS.competitors, report);
+    return NextResponse.json({ ...report, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    return NextResponse.json(
+      { error: "Failed to research competitors", details: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
 }

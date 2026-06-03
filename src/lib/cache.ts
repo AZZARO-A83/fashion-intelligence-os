@@ -73,4 +73,7 @@ export const CACHE_KEYS = {
   weekly: "report:weekly:latest",
   monthly: "report:monthly:latest",
   monthlyPlan: "report:monthly-plan:latest",
+  trends: "live:trends:latest",
+  competitors: "live:competitors:latest",
+  campaigns: "live:campaigns:latest",
 } as const;

@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
-import { mockCampaigns } from "@/lib/mock-data";
+import { getCachedReport, CACHE_KEYS } from "@/lib/cache";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const month = searchParams.get("month");
-  const year = searchParams.get("year");
-
-  let campaigns = mockCampaigns;
-
-  if (month && year) {
-    campaigns = mockCampaigns.filter(
-      (c) => c.month === parseInt(month) && c.year === parseInt(year)
-    );
-  }
-
-  return NextResponse.json({ campaigns });
+// GET — return the last live-generated campaigns (cached, no tokens, shared).
+// No more mock campaigns: empty until someone generates.
+export async function GET() {
+  const cached = await getCachedReport<unknown[]>(CACHE_KEYS.campaigns);
+  return NextResponse.json({
+    campaigns: cached?.data ?? [],
+    generatedAt: cached?.generatedAt ?? null,
+  });
 }

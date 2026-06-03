@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateMonthlyCampaigns } from "@/lib/claude";
 import { getSalesData, buildSalesSummary } from "@/lib/shopify";
-import { RICH_TRENDS, buildTrendsSummary } from "@/lib/trend-engine";
 import { getSeasonalContext } from "@/lib/egyptian-context";
+import { getCachedReport, setCachedReport, CACHE_KEYS } from "@/lib/cache";
+import { RichTrend } from "@/lib/trend-engine";
 import { CampaignGenerationInput } from "@/types";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -17,7 +20,14 @@ export async function POST(request: Request) {
   const salesData = await getSalesData();
   const salesSummary = buildSalesSummary(salesData);
   const seasonalContext = getSeasonalContext(month, year);
-  const trendsSummary = buildTrendsSummary();
+
+  // 🟢 Real live trends (from the Trend Engine's last scan) instead of hardcoded.
+  const cachedTrends = await getCachedReport<RichTrend[]>(CACHE_KEYS.trends);
+  const trendsSummary = cachedTrends?.data?.length
+    ? "LIVE TRENDS (from web search):\n" + cachedTrends.data
+        .map((t) => `- ${t.name} (${t.platform}, score ${t.trendScore}): ${t.description}`)
+        .join("\n")
+    : "No live trend scan yet — base campaigns on current season + real sales below.";
 
   const competitorSummary = `
 Research these Egyptian fashion competitors fresh and find their current gaps:
@@ -48,6 +58,7 @@ Data source: ${salesData.isLive ? "🟢 LIVE Shopify data" : "🔴 Mock data (Sh
 
   try {
     const campaigns = await generateMonthlyCampaigns(input);
+    await setCachedReport(CACHE_KEYS.campaigns, campaigns); // share with the team
     return NextResponse.json({
       campaigns,
       dataSource: salesData.isLive ? "live" : "mock",
