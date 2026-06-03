@@ -143,13 +143,17 @@ export async function collectSources(
   );
   const seen = new Set<string>();
   const sources: Source[] = [];
+  // Drop junk: generic platform-only titles, no real content, or low relevance.
+  const genericTitle = /^(instagram|tiktok|facebook|tik tok)\.?$/i;
   for (const r of runs) {
     for (const x of r.results ?? []) {
-      if (x.url && !seen.has(x.url)) {
+      const title = (x.title || "").trim();
+      const snippet = (x.content || "").replace(/\s+/g, " ").trim();
+      const relevant = (x.score ?? 0) >= 0.4 && title.length > 3 && !genericTitle.test(title) && snippet.length > 40;
+      if (x.url && !seen.has(x.url) && relevant) {
         seen.add(x.url);
-        const snippet = (x.content || "").replace(/\s+/g, " ").trim();
         sources.push({
-          title: x.title, url: x.url, date: x.published_date, score: x.score,
+          title, url: x.url, date: x.published_date, score: x.score,
           summary: snippet.length > 260 ? snippet.slice(0, 257).trimEnd() + "…" : snippet,
         });
       }

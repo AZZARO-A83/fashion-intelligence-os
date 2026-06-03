@@ -44,15 +44,20 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   ]);
 
   const prompt = `You are a fashion trend analyst for DEBACKERS Egypt (premium men+women fashion).
-Using the LIVE web search results below, identify the 5 most relevant CURRENT trends for Egyptian fashion right now.
+Identify the most relevant CURRENT trends — but you MUST base each one on something SPECIFIC found in the live search below. Do NOT invent generic seasonal trends ("summer fashion", "modest fashion") unless the search clearly evidences them. Quote/paraphrase the real signal in the "signals" field. If the search only yields 3 solid trends, return 3 — quality over filling 5.
 
-=== LIVE SEARCH RESULTS ===
+=== LIVE SEARCH RESULTS (your ONLY source of truth) ===
 ${trends}
 
 ${influencers}
 === END ===
 
-Return ONLY a JSON array of 5 trends in EXACTLY this shape:
+Rules:
+- Each trend must trace to a real signal in the search above (put it in "signals" with the source name).
+- Be SPECIFIC (a named aesthetic, colour, silhouette, brand move) — not broad categories.
+- Only men's/women's clothing/fashion relevant to a premium brand. Ignore anything off-topic.
+
+Return ONLY a JSON array of 3-5 trends in EXACTLY this shape:
 [{
   "id": "kebab-id",
   "name": "Trend name",
