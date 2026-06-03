@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FlameKindling, RefreshCw, TrendingUp, Zap, Users, AlertCircle, Copy, Check } from "lucide-react";
 import { FlashBrief } from "@/types";
+import { HelpButton } from "@/components/ui/help-button";
 
 function DataBadge({ type }: { type: "live" | "ai" | "mock" }) {
   if (type === "live") return <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE</span>;
@@ -94,6 +95,7 @@ export default function FlashBriefPage() {
               <h1 className="text-2xl font-bold text-foreground">Flash Brief</h1>
               <span className="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded font-bold">3-DAY</span>
               <DataBadge type="ai" />
+              <HelpButton section="/agency/flash" />
             </div>
             <p className="text-sm text-muted">Market research + campaign ideas for the next 3 days — For marketing team & content creators</p>
           </div>
