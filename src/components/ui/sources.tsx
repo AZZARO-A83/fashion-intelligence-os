@@ -7,6 +7,7 @@ export interface Source {
   url: string;
   date?: string;
   score?: number;
+  summary?: string;
 }
 
 // Shows the REAL web sources behind a live research result so the user can
@@ -50,10 +51,13 @@ export function Sources({ sources }: { sources: Source[] }) {
             >
               <span className="text-[10px] font-bold text-muted w-5 flex-shrink-0 mt-0.5">{i + 1}.</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground truncate group-hover:text-accent">{s.title || host}</p>
-                <p className="text-[11px] text-muted truncate">
+                <p className="text-sm text-foreground group-hover:text-accent">{s.title || host}</p>
+                <p className="text-[11px] text-muted">
                   {host}{s.date ? ` · ${new Date(s.date).toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" })}` : ""}
                 </p>
+                {s.summary && (
+                  <p className="text-xs text-foreground-muted leading-relaxed mt-1.5">{s.summary}</p>
+                )}
               </div>
               <ExternalLink className="w-3.5 h-3.5 text-muted group-hover:text-accent flex-shrink-0 mt-0.5" />
             </a>

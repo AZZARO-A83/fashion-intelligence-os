@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { callGemini } from "@/lib/gemini";
 import { getSalesData, buildSalesSummary } from "@/lib/shopify";
 import { getInstagramAnalytics, getFacebookAdsAnalytics, getTikTokAnalytics, buildSocialSummary } from "@/lib/social-analytics";
-import { COMPETITOR_DATABASE, DEBACKERS_PROFILE, analyzeMarketGaps, generateCompetitorInsightSummary } from "@/lib/competitor-intelligence";
+import { DEBACKERS_PROFILE, analyzeMarketGaps, generateCompetitorInsightSummary } from "@/lib/competitor-intelligence";
 import { getSeasonalContext, EGYPTIAN_FASHION_SYSTEM_PROMPT } from "@/lib/egyptian-context";
-import { RICH_TRENDS, buildTrendsSummary } from "@/lib/trend-engine";
+import { getCachedReport, CACHE_KEYS } from "@/lib/cache";
+import { RichTrend } from "@/lib/trend-engine";
+import { CompetitorIntelligence } from "@/lib/competitor-intelligence";
+
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const { month, year } = await request.json();
@@ -30,15 +34,24 @@ export async function POST(request: Request) {
     const salesSummary = buildSalesSummary(salesData);
     const socialSummary = buildSocialSummary(ig, fbAds, tt);
 
-    const competitorSummary = COMPETITOR_DATABASE.map((c) =>
-      `${c.name} (threat: ${c.threatLevel}):
-      - Active campaigns: ${c.campaigns.map((camp) => camp.name).join(", ")}
-      - Content strategy: ${c.contentThemes.join(", ")}
-      - Pricing: ${c.pricingStrategy}
-      - Gaps you can exploit: ${c.gaps.slice(0, 3).join(" | ")}`
-    ).join("\n\n");
+    // 🟢 LIVE competitors (from the Competitors page's last live research)
+    const cachedComp = await getCachedReport<{ competitors: CompetitorIntelligence[] }>(CACHE_KEYS.competitors);
+    const competitorSummary = cachedComp?.data?.competitors?.length
+      ? cachedComp.data.competitors.map((c) =>
+          `${c.name} (threat: ${c.threatLevel}):
+          - What they're doing: ${(c.insights ?? []).slice(0, 3).join(" | ")}
+          - Pricing: ${c.pricingStrategy}
+          - Gaps to exploit: ${(c.gaps ?? []).slice(0, 3).join(" | ")}`
+        ).join("\n\n")
+      : "No live competitor research yet — run the Competitors page to populate this.";
 
-    const trendsSummary = buildTrendsSummary();
+    // 🟢 LIVE trends (from the Trend Engine's last live scan)
+    const cachedTrends = await getCachedReport<RichTrend[]>(CACHE_KEYS.trends);
+    const trendsSummary = cachedTrends?.data?.length
+      ? "LIVE TRENDS:\n" + cachedTrends.data
+          .map((t) => `- ${t.name} (${t.platform}, score ${t.trendScore}): ${t.description}`)
+          .join("\n")
+      : "No live trend scan yet — run the Trend Engine to populate this.";
 
     // ── Claude Sonnet — Full Monthly Campaign Plan ────────────────────
     const prompt = `
@@ -155,12 +168,12 @@ Return ONLY valid JSON. No markdown. No extra text.
     return NextResponse.json({
       plan,
       dataUsed: {
-        shopify: true,
-        instagram: true,
-        facebookAds: true,
-        tiktok: true,
-        competitors: COMPETITOR_DATABASE.map((c) => c.name),
-        trends: RICH_TRENDS.length,
+        shopify: salesData.isLive,        // 🟢 real
+        instagram: false,                 // 🔴 not connected (needs Meta API)
+        facebookAds: false,               // 🔴 not connected (needs Meta API)
+        tiktok: false,                    // 🔴 not connected (needs TikTok API)
+        competitors: cachedComp?.data?.competitors?.map((c) => c.name) ?? [],
+        trends: cachedTrends?.data?.length ?? 0,
         marketGaps: marketGaps.length,
       },
       generatedAt: new Date().toISOString(),

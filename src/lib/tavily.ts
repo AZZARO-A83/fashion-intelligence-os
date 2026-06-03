@@ -126,6 +126,7 @@ export interface Source {
   url: string;
   date?: string;
   score?: number;
+  summary?: string; // 1-2 line takeaway from the article so you know what's in it
 }
 
 export async function collectSources(
@@ -146,7 +147,11 @@ export async function collectSources(
     for (const x of r.results ?? []) {
       if (x.url && !seen.has(x.url)) {
         seen.add(x.url);
-        sources.push({ title: x.title, url: x.url, date: x.published_date, score: x.score });
+        const snippet = (x.content || "").replace(/\s+/g, " ").trim();
+        sources.push({
+          title: x.title, url: x.url, date: x.published_date, score: x.score,
+          summary: snippet.length > 260 ? snippet.slice(0, 257).trimEnd() + "…" : snippet,
+        });
       }
     }
   }
