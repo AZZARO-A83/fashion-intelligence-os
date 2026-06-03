@@ -17,6 +17,10 @@ export const SECTION_HELP: Record<string, SectionHelp> = {
     what: "The full plan for the month — content ideas and campaigns laid out so you know what to post and when.",
     who: "Management + Marketing team.",
   },
+  "/calendar": {
+    what: "Real upcoming events through year-end (World Cup, back-to-school, Black Friday, wedding season) with the fashion angle and when to start prepping each.",
+    who: "Everyone — plan campaigns around what's coming.",
+  },
   "/sales": {
     what: "Real sales pulled live from Shopify — top products, revenue, and what's actually selling right now.",
     who: "Management.",

@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/monthly-plan", label: "Monthly Plan", icon: CalendarDays, highlight: true },
+  { href: "/calendar", label: "Event Calendar", icon: CalendarRange },
   { href: "/sales", label: "Sales Insights", icon: ShoppingCart },
   { href: "/trends", label: "Trend Engine", icon: TrendingUp },
   { href: "/trends/alerts", label: "Trend Alerts", icon: Bell },
