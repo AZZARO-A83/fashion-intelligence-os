@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Briefcase, FlameKindling, CalendarRange, LineChart, ArrowRight, Info } from "lucide-react";
+import { HelpButton } from "@/components/ui/help-button";
 
 const reports = [
   {
@@ -49,7 +50,10 @@ export default function AgencyHubPage() {
             <Briefcase className="w-5 h-5 text-accent" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Agency Intelligence</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-foreground">Agency Intelligence</h1>
+              <HelpButton section="/agency" />
+            </div>
             <p className="text-sm text-muted">DeBacker&apos;s AI Marketing Research — replacing agency research with real data</p>
           </div>
         </div>

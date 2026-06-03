@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CalendarRange, RefreshCw, AlertCircle, Target, Users, CalendarDays } from "lucide-react";
 import { WeeklyBrief } from "@/types";
+import { HelpButton } from "@/components/ui/help-button";
 
 function DataBadge() {
   return <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-bold">🔵 AI RESEARCH</span>;
@@ -61,6 +62,7 @@ export default function WeeklyReportPage() {
               <h1 className="text-2xl font-bold text-foreground">Weekly Report</h1>
               <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-bold">WEEKLY</span>
               <DataBadge />
+              <HelpButton section="/agency/weekly" />
             </div>
             <p className="text-sm text-muted">Full week strategy, competitor watch, content plan, KPI targets — For management & marketing team</p>
           </div>

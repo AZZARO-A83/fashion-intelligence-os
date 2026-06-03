@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LineChart, RefreshCw, AlertCircle } from "lucide-react";
 import { MonthlyStrategy } from "@/types";
+import { HelpButton } from "@/components/ui/help-button";
 
 function DataBadge() {
   return <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold">🔵 AI RESEARCH</span>;
@@ -55,6 +56,7 @@ export default function MonthlyStrategyPage() {
               <h1 className="text-2xl font-bold text-foreground">Monthly Strategy</h1>
               <span className="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded font-bold">MONTHLY</span>
               <DataBadge />
+              <HelpButton section="/agency/monthly" />
             </div>
             <p className="text-sm text-muted">Full market analysis, seasonal plan, campaign calendar, budget — For management</p>
           </div>
