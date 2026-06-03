@@ -22,7 +22,10 @@ export default function MonthlyStrategyPage() {
     try {
       setStep("searching");
       const researchRes = await fetch("/api/agency/research");
-      if (!researchRes.ok) throw new Error("Web search failed");
+      if (!researchRes.ok) {
+        const errData = await researchRes.json().catch(() => ({}));
+        throw new Error(`Web search failed: ${errData.details || researchRes.status}`);
+      }
       const research = await researchRes.json();
 
       setStep("generating");
@@ -31,7 +34,10 @@ export default function MonthlyStrategyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ research }),
       });
-      if (!res.ok) throw new Error("Failed to generate monthly strategy");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(`Generation failed: ${errData.details || res.status}`);
+      }
       const data = await res.json();
       setStrategy(data.strategy);
       setStep("idle");
