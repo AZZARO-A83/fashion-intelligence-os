@@ -5,6 +5,29 @@
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 const TAVILY_URL = "https://api.tavily.com/search";
 
+// ─── Trusted fashion sources (user-curated) ──────────────────────────
+// Search is restricted to THESE domains so results are premium fashion /
+// journalist / organization sources — never random off-topic pages.
+// Based on the references the user provided + matching fashion authorities.
+export const FASHION_SOURCE_DOMAINS = [
+  "thebeesmagazine.com",      // Egyptian fashion magazine
+  "instagram.com",            // fashion accounts / Egypt Fashion Week / creators
+  "facebook.com",             // ELLE Egypt + brand pages
+  "modash.io",                // Egypt fashion influencer database
+  "ellearabia.com",           // ELLE Arabia
+  "harpersbazaararabia.com",  // Harper's Bazaar Arabia
+  "vogue.com",
+  "businessoffashion.com",
+  "scoopempire.com",          // Egypt culture/fashion
+  "fibre2fashion.com",        // fashion industry news (dated)
+];
+
+// Subset that publishes dated NEWS articles (for the news pass).
+const FASHION_NEWS_DOMAINS = [
+  "fibre2fashion.com", "businessoffashion.com", "vogue.com",
+  "ellearabia.com", "harpersbazaararabia.com", "scoopempire.com",
+];
+
 interface TavilyResult {
   title: string;
   url: string;
@@ -35,6 +58,7 @@ export async function tavilySearch(
     includeAnswer?: boolean;
     days?: number; // how recent (days)
     topic?: "general" | "news"; // "news" → dated articles from publishers
+    includeDomains?: string[];  // restrict to these domains only
   } = {}
 ): Promise<{ results: TavilyResult[]; answer?: string; error?: string }> {
   if (!TAVILY_API_KEY) {
@@ -55,7 +79,7 @@ export async function tavilySearch(
         include_answer: options.includeAnswer ?? false,
         days: options.days ?? 7,
         topic: options.topic ?? "general",
-        include_domains: [],
+        include_domains: options.includeDomains ?? [],
         exclude_domains: [],
       }),
     });
@@ -112,8 +136,8 @@ export async function collectSources(
   // generic discovery pages.
   const runs = await Promise.all(
     queries.flatMap(({ q, days, topic }) => [
-      withTimeout(tavilySearch(q, { days: days ?? 21, maxResults: 4, searchDepth: "advanced", topic: topic ?? "general" }), 9000, FALLBACK),
-      withTimeout(tavilySearch(q, { days: days ?? 30, maxResults: 3, searchDepth: "advanced", topic: "news" }), 9000, FALLBACK),
+      withTimeout(tavilySearch(q, { days: days ?? 21, maxResults: 4, searchDepth: "advanced", topic: topic ?? "general", includeDomains: FASHION_SOURCE_DOMAINS }), 9000, FALLBACK),
+      withTimeout(tavilySearch(q, { days: days ?? 30, maxResults: 3, searchDepth: "advanced", topic: "news", includeDomains: FASHION_NEWS_DOMAINS }), 9000, FALLBACK),
     ])
   );
   const seen = new Set<string>();
@@ -138,10 +162,11 @@ export async function collectSources(
 const FALLBACK = { results: [], error: "timeout" };
 
 export async function searchEgyptianFashionTrends(): Promise<string> {
+  const D = FASHION_SOURCE_DOMAINS;
   const searches = await Promise.all([
-    withTimeout(tavilySearch("Egyptian fashion TikTok trends 2026 مصر موضة", { days: 7, maxResults: 3 }), 8000, FALLBACK),
-    withTimeout(tavilySearch("Egypt Instagram fashion trending hashtags summer 2026", { days: 7, maxResults: 3 }), 8000, FALLBACK),
-    withTimeout(tavilySearch("Egyptian fashion ecommerce trends June 2026", { days: 14, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian men women premium fashion clothing trends 2026 مصر موضة ملابس", { days: 14, maxResults: 3, searchDepth: "advanced", includeDomains: D }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egypt Cairo Sahel fashion style outfits men women 2026", { days: 14, maxResults: 3, searchDepth: "advanced", includeDomains: D }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian fashion week designers premium clothing 2026", { days: 30, maxResults: 3, searchDepth: "advanced", includeDomains: D }), 8000, FALLBACK),
   ]);
 
   return `
@@ -184,10 +209,11 @@ ${formatResults(searches[3].results)}
 }
 
 export async function searchEgyptianInfluencers(): Promise<string> {
+  const D = ["instagram.com", "modash.io", "facebook.com", "thebeesmagazine.com"];
   const searches = await Promise.all([
-    withTimeout(tavilySearch("Egyptian fashion influencers women TikTok Instagram 2026 مؤثرات موضة مصر", { days: 30, maxResults: 4 }), 8000, FALLBACK),
-    withTimeout(tavilySearch("Egyptian men fashion influencers TikTok 2026 مؤثرين رجالي مصر", { days: 30, maxResults: 4 }), 8000, FALLBACK),
-    withTimeout(tavilySearch("top Egyptian fashion content creators 2026 brands collaboration", { days: 30, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian fashion influencers women Instagram 2026 مؤثرات موضة مصر", { days: 45, maxResults: 4, searchDepth: "advanced", includeDomains: D }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian men fashion influencers 2026 مؤثرين رجالي مصر", { days: 45, maxResults: 4, searchDepth: "advanced", includeDomains: D }), 8000, FALLBACK),
+    withTimeout(tavilySearch("top Egyptian fashion content creators 2026 brand collaboration", { days: 45, maxResults: 3, searchDepth: "advanced", includeDomains: D }), 8000, FALLBACK),
   ]);
 
   return `
@@ -206,9 +232,9 @@ ${formatResults(searches[2].results)}
 
 export async function searchMarketIntelligence(): Promise<string> {
   const searches = await Promise.all([
-    withTimeout(tavilySearch("Egyptian fashion ecommerce market summer 2026 consumer behavior", { days: 14, maxResults: 3 }), 8000, FALLBACK),
-    withTimeout(tavilySearch("Egypt North Coast summer fashion shopping 2026 Sahel", { days: 14, maxResults: 3 }), 8000, FALLBACK),
-    withTimeout(tavilySearch("Egyptian consumer spending fashion June 2026", { days: 14, maxResults: 3 }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian fashion clothing market 2026 men women premium", { days: 30, maxResults: 3, searchDepth: "advanced", includeDomains: FASHION_NEWS_DOMAINS }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egypt fashion retail trends consumer 2026", { days: 30, maxResults: 3, searchDepth: "advanced", includeDomains: FASHION_NEWS_DOMAINS }), 8000, FALLBACK),
+    withTimeout(tavilySearch("Egyptian fashion industry news 2026", { days: 30, maxResults: 3, searchDepth: "advanced", topic: "news", includeDomains: FASHION_NEWS_DOMAINS }), 8000, FALLBACK),
   ]);
 
   return `
