@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FlameKindling, RefreshCw, TrendingUp, Zap, Users, Copy, Check } from "lucide-react";
 import { FlashBrief } from "@/types";
 import { HelpButton } from "@/components/ui/help-button";
 import { GenerationError } from "@/components/ui/generation-error";
+import { timeAgo } from "@/lib/utils";
 
 function DataBadge({ type }: { type: "live" | "ai" | "mock" }) {
   if (type === "live") return <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE</span>;
@@ -43,8 +44,22 @@ export default function FlashBriefPage() {
   const [brief, setBrief] = useState<FlashBrief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
 
   const [step, setStep] = useState<"idle"|"searching"|"generating"|"done">("idle");
+
+  // Load the shared report the team already generated — no AI, no tokens.
+  useEffect(() => {
+    fetch("/api/agency/cached?type=flash")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.cached) {
+          setBrief(d.cached);
+          setCachedAt(d.generatedAt);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const generate = async () => {
     setLoading(true);
@@ -74,6 +89,7 @@ export default function FlashBriefPage() {
       }
       const data = await res.json();
       setBrief(data.brief);
+      setCachedAt(new Date().toISOString());
       setStep("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -99,6 +115,7 @@ export default function FlashBriefPage() {
               <HelpButton section="/agency/flash" />
             </div>
             <p className="text-sm text-muted">Market research + campaign ideas for the next 3 days — For marketing team & content creators</p>
+            {cachedAt && <p className="text-xs text-muted mt-0.5">🔄 Last generated {timeAgo(cachedAt)} · shared with your whole team</p>}
           </div>
         </div>
         <button

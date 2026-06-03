@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateWeeklyBrief } from "@/lib/research-engine";
+import { setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
 export const maxDuration = 60;
 
@@ -8,6 +9,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const researchData = body.research ?? null;
     const brief = await generateWeeklyBrief(researchData);
+    await setCachedReport(CACHE_KEYS.weekly, brief); // share with the whole team
     return NextResponse.json({ brief, status: "ai-research" });
   } catch (err) {
     return NextResponse.json(

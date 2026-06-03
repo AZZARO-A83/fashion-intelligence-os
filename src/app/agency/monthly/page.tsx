@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LineChart, RefreshCw } from "lucide-react";
 import { MonthlyStrategy } from "@/types";
 import { HelpButton } from "@/components/ui/help-button";
 import { GenerationError } from "@/components/ui/generation-error";
+import { timeAgo } from "@/lib/utils";
 
 function DataBadge() {
   return <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-bold">🔵 AI RESEARCH</span>;
@@ -14,8 +15,22 @@ export default function MonthlyStrategyPage() {
   const [strategy, setStrategy] = useState<MonthlyStrategy | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
 
   const [step, setStep] = useState<"idle"|"searching"|"generating">("idle");
+
+  // Load the shared report the team already generated — no AI, no tokens.
+  useEffect(() => {
+    fetch("/api/agency/cached?type=monthly")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.cached) {
+          setStrategy(d.cached);
+          setCachedAt(d.generatedAt);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const generate = async () => {
     setLoading(true);
@@ -41,6 +56,7 @@ export default function MonthlyStrategyPage() {
       }
       const data = await res.json();
       setStrategy(data.strategy);
+      setCachedAt(new Date().toISOString());
       setStep("idle");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -66,6 +82,7 @@ export default function MonthlyStrategyPage() {
               <HelpButton section="/agency/monthly" />
             </div>
             <p className="text-sm text-muted">Full market analysis, seasonal plan, campaign calendar, budget — For management</p>
+            {cachedAt && <p className="text-xs text-muted mt-0.5">🔄 Last generated {timeAgo(cachedAt)} · shared with your whole team</p>}
           </div>
         </div>
         <button

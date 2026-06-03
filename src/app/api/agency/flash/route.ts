@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { generateFlashBrief } from "@/lib/research-engine";
+import { setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
 export const maxDuration = 60;
 
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
     const researchData = body.research ?? null;
 
     const brief = await generateFlashBrief(researchData);
+    await setCachedReport(CACHE_KEYS.flash, brief); // share with the whole team
     return NextResponse.json({ brief, status: "ai-research" });
 
   } catch (err) {
