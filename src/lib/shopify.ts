@@ -164,7 +164,8 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const totalRevenue = Math.round(cur.net);          // 🟢 Shopify "Net sales"
   const totalOrders = cur.orderCount;
-  const avgOrderValue = Math.round(cur.net / totalOrders);
+  // Shopify computes AOV on a GROSS basis (gross ÷ orders), not net — match that.
+  const avgOrderValue = Math.round(cur.gross / totalOrders);
 
   // ─── Growth: current net vs equal prior period net ────────────────
   const pct = (now: number, prev: number) =>
