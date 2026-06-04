@@ -128,6 +128,14 @@ PLATFORM: ${input.platform}
 
 FORMAT: ${typeInstructions[input.type] ?? "Create compelling marketing content."}
 
+WRITING FRAMEWORK (apply all — this is what makes content convert):
+- HOOK: the first line decides if anyone watches/reads. Use a real hook formula — curiosity ("the real reason X isn't what you think"), specificity, a bold claim, or a relatable pain. Never a generic greeting.
+- BENEFITS over features: don't say "linen shirt" — say what it does for them ("stays cool through a North Coast day, dinner-ready by night").
+- SPECIFIC over vague: name the colour, fabric, fit, occasion. Avoid "stylish", "elegant", "premium quality" alone.
+- CUSTOMER LANGUAGE: write how a young Egyptian actually talks/searches, not brand-speak.
+- SHOW don't tell, CONFIDENT not hedged. One clear idea, one clear action.
+- Tie to a real moment (season, salary week 25–30th, North Coast, an event) when relevant.
+
 Return a JSON object ONLY:
 {
   "title": "Content piece title",
