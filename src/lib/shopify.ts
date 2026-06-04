@@ -78,6 +78,34 @@ async function getRealProducts() {
   return data.products ?? [];
 }
 
+export interface ShopifyProductImage {
+  title: string;
+  image: string;     // real product photo URL (Shopify CDN)
+  price: string;     // EGP
+  type: string;      // product type (Suits, Polo, Dress…)
+  url: string;       // link to the product page
+}
+
+// Real Debackers product images — live from Shopify (for the Inspiration page).
+export async function getShopifyProductImages(limit = 16): Promise<ShopifyProductImage[]> {
+  if (!hasShopifyKeys()) return [];
+  try {
+    const data = await fetchShopify(`products.json?limit=${limit}&fields=id,title,handle,images,variants,product_type&status=active`);
+    return (data.products ?? [])
+      .filter((p: any) => p.images?.length)
+      .map((p: any) => ({
+        title: p.title,
+        image: p.images[0].src,
+        price: p.variants?.[0]?.price ?? "",
+        type: p.product_type ?? "",
+        url: `https://${SHOPIFY_URL}/products/${p.handle}`,
+      }));
+  } catch (err) {
+    console.error("[Shopify] product images failed:", err);
+    return [];
+  }
+}
+
 // Pull ALL abandoned checkouts with pagination
 async function getRealAbandonedCarts(): Promise<{ count: number; totalValue: number }> {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();

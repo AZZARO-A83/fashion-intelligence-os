@@ -17,6 +17,14 @@ interface MoodBoard {
   useFor: string;
 }
 
+interface ShopProduct {
+  title: string;
+  image: string;
+  price: string;
+  type: string;
+  url: string;
+}
+
 // Curated Unsplash images for Egyptian fashion campaigns
 const IMAGE_LIBRARY: (ImageReference & { id: string; campaignHint: string })[] = [
   {
@@ -249,6 +257,7 @@ export default function InspirationPage() {
   // Live mood boards (real colors + direction from live trends + sources)
   const [boards, setBoards] = useState<MoodBoard[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
+  const [products, setProducts] = useState<ShopProduct[]>([]);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -256,7 +265,10 @@ export default function InspirationPage() {
   useEffect(() => {
     fetch("/api/inspiration")
       .then((r) => r.json())
-      .then((d) => { if (d.boards?.length) { setBoards(d.boards); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); } })
+      .then((d) => {
+        setProducts(d.products ?? []);
+        if (d.boards?.length) { setBoards(d.boards); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); }
+      })
       .catch(() => {});
   }, []);
 
@@ -349,6 +361,29 @@ export default function InspirationPage() {
             </>
           )}
         </div>
+
+        {/* Real Debackers products — live from Shopify */}
+        {products.length > 0 && (
+          <div className="bg-surface border border-border/50 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <h2 className="text-sm font-semibold text-foreground">Your Real Products</h2>
+              <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE from Shopify</span>
+            </div>
+            <p className="text-xs text-muted mb-4">Real Debackers photos — use these in content, pair them with the mood boards above.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+              {products.map((p, i) => (
+                <a key={i} href={p.url} target="_blank" rel="noreferrer" className="group">
+                  <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-2 border border-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
+                  </div>
+                  <p className="text-[11px] text-foreground mt-1.5 truncate group-hover:text-accent">{p.title}</p>
+                  <p className="text-[10px] text-muted">{p.type} · EGP {parseFloat(p.price || "0").toLocaleString("en-EG")}</p>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Color Palettes */}
         <div className="bg-surface border border-border/50 rounded-xl p-5">

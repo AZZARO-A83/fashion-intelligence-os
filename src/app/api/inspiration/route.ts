@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 import { generateLiveInspiration } from "@/lib/live-research";
+import { getShopifyProductImages } from "@/lib/shopify";
 import { getCachedReport, setCachedReport, CACHE_KEYS } from "@/lib/cache";
 
 export const maxDuration = 60;
 
-// GET — return last live-generated mood boards + sources (cached, no tokens).
+// GET — last mood boards + sources (cached) + LIVE real Shopify product images.
 export async function GET() {
-  const cached = await getCachedReport<{ boards: unknown[]; sources: unknown[] }>(CACHE_KEYS.inspiration);
+  const [cached, products] = await Promise.all([
+    getCachedReport<{ boards: unknown[]; sources: unknown[] }>(CACHE_KEYS.inspiration),
+    getShopifyProductImages(16),
+  ]);
   return NextResponse.json({
     boards: cached?.data?.boards ?? [],
     sources: cached?.data?.sources ?? [],
+    products, // 🟢 real Debackers product photos, live from Shopify
     generatedAt: cached?.generatedAt ?? null,
   });
 }
