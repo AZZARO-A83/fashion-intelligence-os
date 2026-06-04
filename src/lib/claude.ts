@@ -1,6 +1,16 @@
-// AI client — uses Gemini (free) with Anthropic fallback
+// AI client — uses Groq (free) under the hood
 import { callGemini } from "./gemini";
 import { EGYPTIAN_FASHION_SYSTEM_PROMPT } from "./egyptian-context";
+
+// Robust JSON parse — strips markdown fences / stray prose around the JSON
+// so Groq's occasional extra text doesn't break generation.
+function parseJson<T>(text: string): T {
+  const cleaned = text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
+  const start = cleaned.search(/[[{]/);
+  const end = Math.max(cleaned.lastIndexOf("]"), cleaned.lastIndexOf("}"));
+  const slice = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+  return JSON.parse(slice) as T;
+}
 import {
   Campaign,
   CampaignGenerationInput,
@@ -71,7 +81,7 @@ Return ONLY valid JSON array, no markdown or extra text.
   const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 4000);
 
   try {
-    const campaigns = JSON.parse(text) as Omit<Campaign, "id" | "month" | "year" | "status">[];
+    const campaigns = parseJson<Omit<Campaign, "id" | "month" | "year" | "status">[]>(text);
     return campaigns.map((c, i) => ({
       ...c,
       id: `gen-${Date.now()}-${i}`,
@@ -134,7 +144,7 @@ Return ONLY valid JSON. No markdown. No explanation.
   const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 1500);
 
   try {
-    return JSON.parse(text) as GeneratedContent;
+    return parseJson<GeneratedContent>(text);
   } catch {
     throw new Error("Failed to parse AI content response");
   }
@@ -169,7 +179,7 @@ Return a JSON array of 5 strings ONLY. No markdown.
   const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 800);
 
   try {
-    return JSON.parse(text) as string[];
+    return parseJson<string[]>(text);
   } catch {
     return [
       "Linen shirt sales +32% — strongest summer signal in the catalog.",
@@ -201,7 +211,7 @@ Return ONLY valid JSON. No markdown.
   const text = await callGemini(EGYPTIAN_FASHION_SYSTEM_PROMPT, prompt, 1000);
 
   try {
-    return JSON.parse(text) as Record<string, string>;
+    return parseJson<Record<string, string>>(text);
   } catch {
     return {};
   }

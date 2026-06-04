@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Content generation error:", error);
     return NextResponse.json(
-      { error: "Failed to generate content. Check GEMINI_API_KEY." },
+      { error: "Failed to generate content", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }

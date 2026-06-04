@@ -33,23 +33,21 @@ export interface LiveTrendsResult {
 }
 
 export async function generateLiveTrends(): Promise<LiveTrendsResult> {
-  const [trends, influencers, sources] = await Promise.all([
-    searchEgyptianFashionTrends(),
-    searchEgyptianInfluencers(),
-    collectSources([
-      { q: "Egypt men's premium fashion trends 2026 suits shirts ملابس رجالي", days: 21 },
-      { q: "Egypt women's fashion trends 2026 dresses sets موضة نسائي", days: 21 },
-      { q: "Egyptian fashion week designers 2026 collections", days: 30 },
-    ]),
+  // One source set (fast — avoids the 60s Vercel timeout), men + women.
+  const sources = await collectSources([
+    { q: "Egypt men's premium fashion trends 2026 suits shirts ملابس رجالي", days: 21 },
+    { q: "Egypt women's fashion trends 2026 dresses sets موضة نسائي", days: 21 },
+    { q: "Egyptian fashion week designers collections 2026", days: 45 },
   ]);
+  const searchText = sources.length
+    ? sources.map((s) => `- ${s.title}: ${s.summary}`).join("\n")
+    : "No fresh signals — use Egyptian seasonal context.";
 
   const prompt = `You are a fashion trend analyst for DEBACKERS Egypt (premium men+women fashion).
-Identify the most relevant CURRENT trends — but you MUST base each one on something SPECIFIC found in the live search below. Do NOT invent generic seasonal trends ("summer fashion", "modest fashion") unless the search clearly evidences them. Quote/paraphrase the real signal in the "signals" field. If the search only yields 3 solid trends, return 3 — quality over filling 5.
+Identify the most relevant CURRENT trends — but you MUST base each one on something SPECIFIC found in the live signals below. Do NOT invent generic seasonal trends ("summer fashion", "modest fashion") unless the signals clearly evidence them. Quote/paraphrase the real signal in "signals". Quality over quantity.
 
-=== LIVE SEARCH RESULTS (your ONLY source of truth) ===
-${trends}
-
-${influencers}
+=== LIVE SIGNALS (your ONLY source of truth) ===
+${searchText}
 === END ===
 
 Rules:
