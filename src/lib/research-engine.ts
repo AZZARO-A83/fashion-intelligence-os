@@ -81,6 +81,8 @@ ${context}
 
 ${liveResearch}
 
+HOOK FRAMEWORK: every hook must use a real formula (curiosity / bold claim / relatable pain), be SPECIFIC (name colour, fabric, fit, occasion), sell the benefit + moment not the product label, and balance men's AND women's. Arabic hooks in real Egyptian dialect.
+
 Return ONLY valid JSON:
 {
   "marketPulse": "2 sentences on Egyptian fashion right now",

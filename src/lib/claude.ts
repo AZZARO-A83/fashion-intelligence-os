@@ -46,10 +46,16 @@ ${input.focus ? `SPECIAL FOCUS: ${input.focus}` : ""}
 INSTRUCTIONS:
 1. Analyze the data above to find real opportunities
 2. Do NOT copy competitor ideas — find the gap they are missing
-3. Generate 4–6 campaigns for the month
+3. Generate 4–6 campaigns for the month — BALANCE men's and women's (don't skew one gender)
 4. Each campaign must be justified by specific data points
 5. Assign a confidence score (0–100) based on how strongly the data supports the campaign
-6. Include Arabic hooks in Egyptian dialect (عامية مصرية)
+
+CAMPAIGN-CRAFT FRAMEWORK (apply to every campaign):
+- HOOKS must use a real formula (curiosity / bold claim / relatable pain) — never a generic line. First line earns the watch.
+- Sell the BENEFIT + the moment, not the product label ("the blazer that takes you from a Sahel lunch to a wedding" > "navy blazer").
+- Be SPECIFIC: name colour, fabric, fit, occasion, and the real Egyptian moment (salary week 25–30th, North Coast season, an upcoming event from the calendar).
+- Arabic hooks in Egyptian dialect (عامية مصرية) — how people actually talk, not formal.
+- Tie each campaign to a REAL signal from the data above (a best-seller, a live trend, a competitor gap).
 
 Return a JSON array of campaigns. Each campaign must follow this exact structure:
 [
