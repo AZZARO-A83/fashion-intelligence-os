@@ -37,9 +37,9 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
     searchEgyptianFashionTrends(),
     searchEgyptianInfluencers(),
     collectSources([
-      { q: "Egyptian fashion TikTok trends 2026 مصر موضة", days: 14 },
-      { q: "Egypt Instagram fashion trending hashtags 2026", days: 14 },
-      { q: "Egyptian fashion influencers 2026 مؤثرات موضة مصر", days: 30 },
+      { q: "Egypt men's premium fashion trends 2026 suits shirts ملابس رجالي", days: 21 },
+      { q: "Egypt women's fashion trends 2026 dresses sets موضة نسائي", days: 21 },
+      { q: "Egyptian fashion week designers 2026 collections", days: 30 },
     ]),
   ]);
 
@@ -54,10 +54,11 @@ ${influencers}
 
 Rules:
 - Each trend must trace to a real signal in the search above (put it in "signals" with the source name).
-- Be SPECIFIC (a named aesthetic, colour, silhouette, brand move) — not broad categories.
-- Only men's/women's clothing/fashion relevant to a premium brand. Ignore anything off-topic.
+- BE SPECIFIC: name the actual garment + colour + silhouette + fabric (e.g. "oversized linen camp-collar shirt in sand/olive", "tailored double-breasted blazer in deep navy"). NOT broad categories like "summer fashion" or "modest fashion".
+- BALANCE MEN AND WOMEN: include at least 2 men's-wear trends AND at least 2 women's-wear trends. Put "Men" or "Women" (or "Unisex") at the start of each "description".
+- Only premium men's/women's clothing relevant to Debackers. Ignore anything off-topic.
 
-Return ONLY a JSON array of 3-5 trends in EXACTLY this shape:
+Return ONLY a JSON array of 4-5 trends in EXACTLY this shape:
 [{
   "id": "kebab-id",
   "name": "Trend name",
@@ -192,31 +193,37 @@ export interface LiveAlertsResult {
 }
 
 export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
-  const [trends, market, sources] = await Promise.all([
-    searchEgyptianFashionTrends(),
-    searchMarketIntelligence(),
-    collectSources([
-      { q: "Egyptian fashion trend rising fast 2026 viral مصر", days: 7 },
-      { q: "Egypt fashion market news 2026", days: 14, topic: "news" },
-    ]),
+  // DISTINCT identity: alerts hunt what's SPIKING/NEW this week (not the broad
+  // current trends the Trend Engine covers). Its own sources, men + women.
+  const sources = await collectSources([
+    { q: "Egypt men's fashion rising trend this week 2026 رجالي", days: 7 },
+    { q: "Egypt women's fashion viral new 2026 نسائي", days: 7 },
+    { q: "Egyptian fashion news what's new 2026", days: 10, topic: "news" },
   ]);
+  const searchText = sources.length
+    ? sources.map((s) => `- ${s.title}: ${s.summary}`).join("\n")
+    : "No fresh signals found this week.";
 
-  const prompt = `You are a trend-alert system for DEBACKERS Egypt. From the LIVE search below, surface the 4 FASTEST-RISING trends that need action now.
+  const prompt = `You are a trend-alert system for DEBACKERS Egypt (premium MEN + WOMEN fashion).
+From the LIVE signals below, surface the 4 FASTEST-RISING / NEWEST things that need action now.
 
-=== LIVE SEARCH ===
-${trends}
-
-${market}
+=== LIVE SIGNALS THIS WEEK (your only source) ===
+${searchText}
 === END ===
+
+Rules:
+- Each alert must trace to a signal above (put it in "signals").
+- BE SPECIFIC: name the garment + colour + silhouette (e.g. "men's pleated wide-leg trouser in stone"). NOT "summer fashion".
+- Balance MEN and WOMEN — at least 1 men's and 1 women's alert.
 
 Return ONLY a JSON array of 4 alerts:
 [{
   "trendName":"", "arabicName":"", "platform":"tiktok|instagram|multi", "category":"aesthetic|color|style|product|occasion",
   "currentScore":85, "growthRate":40, "priority":"urgent|high|medium|watch",
-  "signals":["data point from the search"], "relevanceToDebackers":"why it matters",
+  "signals":["data point from the search"], "relevanceToDebackers":"why it matters (men or women)",
   "suggestedAction":"specific move", "hook":"Arabic hook", "hashtags":["#tag"], "peakDaysEstimate":10
 }]
-Base it on the real search signals. Return ONLY the JSON array.`;
+Return ONLY the JSON array.`;
 
   const text = await callClaude(buildSystemPrompt(), prompt, 3500);
   const raw = parseJson<any[]>(text);
@@ -260,29 +267,37 @@ export interface LiveInspirationResult {
 }
 
 export async function generateLiveInspiration(): Promise<LiveInspirationResult> {
-  const [trends, sources] = await Promise.all([
-    searchEgyptianFashionTrends(),
-    collectSources([
-      { q: "fashion color palette mood board 2026 trend", days: 30 },
-      { q: "Egypt summer fashion aesthetic 2026 visual style", days: 30 },
-    ]),
+  // DISTINCT identity: visual/colour direction for the UPCOMING season, men + women.
+  const sources = await collectSources([
+    { q: "fashion colour palette autumn winter 2026 2027 trend forecast", days: 60 },
+    { q: "menswear womenswear key colours silhouettes upcoming season 2026", days: 60 },
+    { q: "Egypt fashion aesthetic mood 2026 editorial", days: 45 },
   ]);
+  const searchText = sources.length
+    ? sources.map((s) => `- ${s.title}: ${s.summary}`).join("\n")
+    : "Use Egyptian seasonal context + premium aesthetics.";
 
-  const prompt = `You are a creative director for DEBACKERS Egypt. From the LIVE trend search below, propose 4 visual mood boards for upcoming content.
+  const prompt = `You are a creative director for DEBACKERS Egypt (premium MEN + WOMEN fashion).
+Propose 4 visual mood boards for the UPCOMING season, grounded in the live signals below.
 
-=== LIVE TRENDS ===
-${trends}
+=== LIVE SIGNALS ===
+${searchText}
 === END ===
+
+Rules:
+- Include BOTH men's and women's boards (at least 1 each).
+- Name specific garments + silhouettes in the description (e.g. "men's relaxed wool overshirt", "women's bias-cut midi").
+- Colours must be real hex codes that match the direction.
 
 Return ONLY a JSON array of 4 boards:
 [{
-  "title":"Board name",
-  "description":"the visual direction in 1-2 sentences",
+  "title":"Board name (say Men or Women)",
+  "description":"visual direction naming specific garments + silhouettes, 1-2 sentences",
   "colors":["#hex1","#hex2","#hex3","#hex4"],
   "mood":"e.g. warm minimalist editorial",
   "useFor":"which Debackers products/campaigns this fits"
 }]
-Use real hex color codes. Return ONLY the JSON array.`;
+Return ONLY the JSON array.`;
 
   const text = await callClaude(buildSystemPrompt(), prompt, 2500);
   const raw = parseJson<any[]>(text);
