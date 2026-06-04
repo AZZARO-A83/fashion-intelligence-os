@@ -15,6 +15,16 @@ import {
 } from "./tavily";
 import { FlashBrief, WeeklyBrief, MonthlyStrategy } from "@/types";
 
+// Robust JSON parse — strips markdown fences / stray prose and grabs the
+// outermost JSON object so Groq's occasional extra text doesn't break it.
+function parseJson<T>(text: string): T {
+  const cleaned = text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
+  const start = cleaned.search(/[[{]/);
+  const end = Math.max(cleaned.lastIndexOf("]"), cleaned.lastIndexOf("}"));
+  const slice = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+  return JSON.parse(slice) as T;
+}
+
 // ─── Context builder ──────────────────────────────────────────────────
 function buildResearchContext(): string {
   const now = new Date();
@@ -90,7 +100,7 @@ Return ONLY valid JSON:
   const text = await callClaude(buildSystemPrompt(), prompt, 3000);
 
   try {
-    const data = JSON.parse(text);
+    const data = parseJson<any>(text);
     return {
       ...data,
       generatedAt: now.toISOString(),
@@ -150,7 +160,7 @@ Return ONLY valid JSON:
   const text = await callClaude(buildSystemPrompt(), prompt, 3500);
 
   try {
-    const data = JSON.parse(text);
+    const data = parseJson<any>(text);
     return {
       ...data,
       generatedAt: now.toISOString(),
@@ -213,7 +223,7 @@ Return ONLY valid JSON:
   const text = await callClaude(buildSystemPrompt(), prompt, 3500);
 
   try {
-    const data = JSON.parse(text);
+    const data = parseJson<any>(text);
     return {
       ...data,
       generatedAt: now.toISOString(),
