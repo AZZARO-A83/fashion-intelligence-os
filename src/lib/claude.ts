@@ -142,6 +142,8 @@ WRITING FRAMEWORK (apply all — this is what makes content convert):
 - SHOW don't tell, CONFIDENT not hedged. One clear idea, one clear action.
 - Tie to a real moment (season, salary week 25–30th, North Coast, an event) when relevant.
 
+CRITICAL LANGUAGE PURITY: write ONLY in the requested language (Egyptian Arabic and/or English). NEVER insert Chinese, Spanish, French, or any other foreign words or characters. Hashtags must be Arabic or English only. Proofread — no stray non-Arabic/English tokens.
+
 Return a JSON object ONLY:
 {
   "title": "Content piece title",

@@ -328,6 +328,7 @@ ${EGYPTIAN_CONSUMER_PROFILE}
 ${buildDynamicCalendar()}
 
 CONTENT RULES FOR EGYPTIAN AUDIENCE:
+0. LANGUAGE PURITY (CRITICAL): write ONLY in Egyptian Arabic and/or English. NEVER output Chinese, Spanish, French, or any other foreign words/characters/hashtags. Proofread every line — remove any stray non-Arabic/English token.
 1. Egyptian Arabic (colloquial/عامية) resonates far better than Modern Standard Arabic
 2. Code-switching (Arabic + English mix) is natural for 18–35 Egyptian audience on social
 3. Reference local context: North Coast / Sahel, Cairo neighborhoods, Egyptian occasions
