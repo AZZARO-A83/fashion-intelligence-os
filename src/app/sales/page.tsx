@@ -4,13 +4,18 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency, formatNumber } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Sparkles, RefreshCw } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   AreaChart, Area, CartesianGrid,
 } from "recharts";
 import { SalesData } from "@/types";
+
+type SalesView = SalesData & { isLive?: boolean; rangeFrom?: string; rangeTo?: string };
+
+function fmtDay(iso: string) {
+  return new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" });
+}
 
 function InsightCard({ insight }: { insight: { metric?: string; value?: string; change?: number; trend?: string; explanation?: string } | string }) {
   const text = typeof insight === "string" ? insight : insight.explanation ?? "";
@@ -43,7 +48,7 @@ function InsightCard({ insight }: { insight: { metric?: string; value?: string; 
 }
 
 export default function SalesPage() {
-  const [data, setData] = useState<SalesData | null>(null);
+  const [data, setData] = useState<SalesView | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -91,28 +96,37 @@ export default function SalesPage() {
 
       <div className="p-8 space-y-8">
 
-        {/* KPI Grid */}
+        {/* Date range */}
+        {data.rangeFrom && data.rangeTo && (
+          <p className="text-xs text-muted">
+            Showing <span className="text-foreground font-semibold">{fmtDay(data.rangeFrom)} → {fmtDay(data.rangeTo)}</span> · live from Shopify
+          </p>
+        )}
+
+        {/* KPI Grid — all exact, all real */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Total Revenue" value={`EGP ${formatNumber(data.totalRevenue)}`} change={data.weeklyGrowth} sub="Last 30 days" accent />
-          <StatCard label="Total Orders" value={data.totalOrders.toLocaleString()} sub="Last 30 days" />
-          <StatCard label="Avg Order Value" value={`EGP ${data.avgOrderValue}`} sub="Per transaction" />
-          <StatCard label="Conversion Rate" value={`${data.conversionRate}%`} sub="Store visitors → buyers" />
+          <StatCard label="Net Sales" value={`EGP ${data.totalRevenue.toLocaleString("en-EG")}`} change={data.weeklyGrowth} sub="Matches Shopify Net sales" accent />
+          <StatCard label="Total Orders" value={data.totalOrders.toLocaleString()} sub="Selected range" />
+          <StatCard label="Avg Order Value" value={`EGP ${data.avgOrderValue.toLocaleString("en-EG")}`} sub="Gross ÷ orders (Shopify basis)" />
+          <StatCard label="Repeat Buyers" value={`${data.repeatPurchaseRate}%`} sub="Customers with 2+ orders" />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Repeat Purchase Rate" value={`${data.repeatPurchaseRate}%`} change={3.2} sub="Returning customers" />
-          <StatCard label="Abandoned Carts" value={data.abandonedCarts.toLocaleString()} change={-5} sub="This month" />
-          <StatCard label="Weekly Growth" value={`+${data.weeklyGrowth}%`} sub="Revenue WoW" />
-          <StatCard label="Recovery Opportunity" value={`EGP ${formatNumber(data.abandonedCarts * data.avgOrderValue * 0.1)}`} sub="Estimated cart recovery" accent />
+          <StatCard label="Abandoned Carts" value={data.abandonedCarts.toLocaleString()} sub="Last 30 days" />
+          <StatCard label="Recovery Opportunity" value={`EGP ${(data.recoveryOpportunity ?? 0).toLocaleString("en-EG")}`} sub="≈15% of abandoned value" accent />
+          <StatCard label="Growth vs prev period" value={`${data.weeklyGrowth >= 0 ? "+" : ""}${data.weeklyGrowth}%`} sub="Net sales, same-length prior" />
+          <StatCard label="Orders growth" value={`${(data.ordersGrowth ?? 0) >= 0 ? "+" : ""}${data.ordersGrowth ?? 0}%`} sub="vs prev period" />
         </div>
 
         {/* Revenue Chart */}
         <div className="bg-surface border border-border/50 rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Revenue Trend — Last 14 Days</h2>
-              <p className="text-xs text-muted mt-0.5">Daily revenue and order volume</p>
+              <h2 className="text-sm font-semibold text-foreground">Revenue Trend — recent days</h2>
+              <p className="text-xs text-muted mt-0.5">Daily revenue (order total) in the selected range</p>
             </div>
-            <Badge variant="success">+{data.weeklyGrowth}% WoW</Badge>
+            <Badge variant={data.weeklyGrowth >= 0 ? "success" : "danger"}>
+              {data.weeklyGrowth >= 0 ? "+" : ""}{data.weeklyGrowth}% vs prev period
+            </Badge>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={chartData}>

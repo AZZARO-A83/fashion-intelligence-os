@@ -304,9 +304,9 @@ function zeroSales(
 export async function getSalesData(
   range?: SalesRange
 ): Promise<SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string }> {
-  // Default = Last 7 days (Egypt today−7 → today). Light + research-focused.
+  // Default = Last 30 days (Egypt today−30 → today) — matches Shopify's default view.
   const toYmd = range?.toYmd ?? egyptTodayYmd();
-  const fromYmd = range?.fromYmd ?? ymdMinusDays(toYmd, 7);
+  const fromYmd = range?.fromYmd ?? ymdMinusDays(toYmd, 30);
   const to = cairoYmdToUtc(toYmd, true);
   const from = cairoYmdToUtc(fromYmd, false);
   const rangeMs = Math.max(86400000, to.getTime() - from.getTime());

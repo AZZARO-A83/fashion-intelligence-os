@@ -166,10 +166,10 @@ export default function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            label="Revenue"
-            value={`EGP ${formatNumber(stats.totalRevenue)}`}
+            label="Net Sales"
+            value={`EGP ${stats.totalRevenue.toLocaleString("en-EG")}`}
             change={stats.revenueGrowth}
-            sub="Selected range"
+            sub="Selected range · matches Shopify Net sales"
             icon={<ShoppingCart className="w-4 h-4 text-accent" />}
             accent
           />
