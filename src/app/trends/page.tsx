@@ -235,6 +235,22 @@ function TrendCard({ trend }: { trend: RichTrend }) {
             )}
           </div>
 
+          {/* 🔍 SEARCHED ABOUT — real demand from Google (what people type) */}
+          {trend.searchDemand && trend.searchDemand.length > 0 && (
+            <div className="bg-blue-400/5 border border-blue-400/20 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">🔍 Searched about — real demand</p>
+                <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-bold">LIVE Google</span>
+              </div>
+              <p className="text-[9px] text-muted mb-2">What Egyptians actually type to search this — colours, gender, intent. (Demand direction, not volume.)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {trend.searchDemand.map((s, i) => (
+                  <span key={i} className="text-[10px] bg-surface text-foreground-muted border border-border px-2 py-1 rounded-full">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Content Prescription */}
           <div className="bg-surface-2 rounded-lg p-4">
             <div className="flex items-center gap-1.5 mb-3">

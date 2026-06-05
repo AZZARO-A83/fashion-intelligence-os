@@ -66,4 +66,8 @@ export interface RichTrend {
   signalsVerified?: string[];     // signals we COULD verify (creator mention, repeated, local brand)
   signalsMissing?: string[];      // signals we could NOT (comments, Google Trends volume)
   recommendedAction?: string;     // content-only / small stock test / campaign push / avoid
+
+  // 🔍 SEARCHED ABOUT — real demand (what people type into Google), free.
+  searchSeed?: string;            // the keyword we checked demand for
+  searchDemand?: string[];        // real Google autocomplete suggestions (demand direction)
 }

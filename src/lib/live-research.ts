@@ -15,6 +15,7 @@ import {
 } from "./tavily";
 import { RichTrend } from "./trend-engine";
 import { getShopifyProductImages } from "./shopify";
+import { getSearchDemand } from "./search-demand";
 
 export type { Source };
 
@@ -84,6 +85,7 @@ Return ONLY a JSON array of 4-6 trends:
   "id":"kebab","name":"","arabicName":"","gender":"men|women|unisex",
   "platform":"tiktok|instagram|google|multi","category":"aesthetic|color|style|product|occasion",
   "trendScore":78,"growthRate":25,"relevanceScore":80,"confidenceScore":70,"expectedPeakDays":14,"survivalRate":60,
+  "searchSeed":"2-4 word English search keyword for this trend, e.g. wide leg pants",
   "evidenceStrength":"strong|medium|weak",
   "signalsVerified":["Egyptian creator calls it a trend","sold by a local brand"],
   "signalsMissing":["buying-intent comments not accessible","no Google Trends volume available"],
@@ -117,8 +119,17 @@ Return ONLY the JSON array.`;
       .slice(0, 4)
       .map((p: any) => ({ title: p.title, image: p.image, url: p.url, price: p.price }));
     trend.matchedProducts = matches;
+    trend.searchSeed = (t.searchSeed || trend.name || "").toString().slice(0, 40);
     return trend;
   });
+
+  // 🔍 SEARCHED ABOUT — pull real Google search demand for each trend (free, parallel).
+  await Promise.all(
+    trends.map(async (trend) => {
+      const seed = trend.searchSeed ? `${trend.searchSeed} egypt` : "";
+      trend.searchDemand = seed ? await getSearchDemand(seed) : [];
+    })
+  );
 
   return { trends, sources };
 }
