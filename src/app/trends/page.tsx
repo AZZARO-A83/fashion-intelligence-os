@@ -167,20 +167,40 @@ function TrendCard({ trend }: { trend: RichTrend }) {
             </div>
           </div>
 
-          {/* Debackers Catalog Match */}
+          {/* Real Debackers products that match (live from Shopify) */}
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <ShoppingBag className="w-3 h-3 text-muted" />
-              <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Your Products That Match</p>
+              <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Your Real Products That Match</p>
+              <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE</span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {trend.catalogMatch.products.map((p) => (
-                <span key={p} className="text-[10px] bg-accent/10 text-accent border border-accent/20 px-2 py-1 rounded-full">
-                  {p}
-                </span>
-              ))}
-            </div>
+            {trend.matchedProducts && trend.matchedProducts.length > 0 ? (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {trend.matchedProducts.map((p, i) => (
+                  <a key={i} href={p.url} target="_blank" rel="noreferrer" className="group">
+                    <div className="aspect-[3/4] rounded-lg overflow-hidden bg-surface-2 border border-border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
+                    </div>
+                    <p className="text-[9px] text-foreground mt-1 truncate group-hover:text-accent">{p.title}</p>
+                    <p className="text-[8px] text-muted">EGP {parseFloat(p.price || "0").toLocaleString("en-EG")}</p>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted">No exact catalog match — consider sourcing for this trend.</p>
+            )}
           </div>
+
+          {/* Per-trend source — validate this trend */}
+          {trend.evidenceUrl && (
+            <a href={trend.evidenceUrl} target="_blank" rel="noreferrer"
+              className="flex items-center gap-2 bg-surface-2 border border-green-500/20 rounded-lg px-3 py-2 hover:border-accent/40 transition-colors group">
+              <span className="text-[9px] font-bold text-green-400 uppercase tracking-wider flex-shrink-0">📡 Source</span>
+              <span className="text-[10px] text-foreground-muted truncate flex-1 group-hover:text-accent">{trend.evidenceTitle}</span>
+              <span className="text-[9px] text-muted">verify →</span>
+            </a>
+          )}
 
           {/* Content Prescription */}
           <div className="bg-surface-2 rounded-lg p-4">

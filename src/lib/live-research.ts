@@ -14,6 +14,7 @@ import {
   Source,
 } from "./tavily";
 import { RichTrend } from "./trend-engine";
+import { getShopifyProductImages } from "./shopify";
 
 export type { Source };
 
@@ -33,55 +34,79 @@ export interface LiveTrendsResult {
 }
 
 export async function generateLiveTrends(): Promise<LiveTrendsResult> {
-  // One source set (fast — avoids the 60s Vercel timeout), men + women.
-  const sources = await collectSources([
-    { q: "Egypt men's premium fashion trends 2026 suits shirts ملابس رجالي", days: 21 },
-    { q: "Egypt women's fashion trends 2026 dresses sets موضة نسائي", days: 21 },
-    { q: "Egyptian fashion week designers collections 2026", days: 45 },
+  // Live sources (men + women) + your REAL Shopify products, in parallel.
+  const [sources, products] = await Promise.all([
+    collectSources([
+      { q: "Egypt men's premium fashion trends 2026 suits shirts ملابس رجالي", days: 21 },
+      { q: "Egypt women's fashion trends 2026 dresses sets موضة نسائي", days: 21 },
+      { q: "Egyptian fashion week designers collections 2026", days: 45 },
+    ]),
+    getShopifyProductImages(40),
   ]);
+
   const searchText = sources.length
-    ? sources.map((s) => `- ${s.title}: ${s.summary}`).join("\n")
+    ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${s.summary}`).join("\n")
     : "No fresh signals — use Egyptian seasonal context.";
+  const productList = products.length
+    ? products.map((p) => `${p.title} (${p.type})`).join("; ")
+    : "(no product list)";
 
   const prompt = `You are a fashion trend analyst for DEBACKERS Egypt (premium men+women fashion).
-Identify the most relevant CURRENT trends — but you MUST base each one on something SPECIFIC found in the live signals below. Do NOT invent generic seasonal trends ("summer fashion", "modest fashion") unless the signals clearly evidence them. Quote/paraphrase the real signal in "signals". Quality over quantity.
+Identify the most relevant CURRENT trends — each MUST trace to a SPECIFIC numbered signal below. Do NOT invent generic seasonal trends. Quality over quantity.
 
-=== LIVE SIGNALS (your ONLY source of truth) ===
+=== LIVE SIGNALS (numbered — your ONLY source of truth) ===
 ${searchText}
 === END ===
 
+=== DEBACKERS REAL PRODUCTS (pick matches ONLY from this exact list) ===
+${productList}
+=== END ===
+
 Rules:
-- Each trend must trace to a real signal in the search above (put it in "signals" with the source name).
-- BE SPECIFIC: name the actual garment + colour + silhouette + fabric (e.g. "oversized linen camp-collar shirt in sand/olive", "tailored double-breasted blazer in deep navy"). NOT broad categories like "summer fashion" or "modest fashion".
-- BALANCE MEN AND WOMEN: include at least 2 men's-wear trends AND at least 2 women's-wear trends. Put "Men" or "Women" (or "Unisex") at the start of each "description".
-- Only premium men's/women's clothing relevant to Debackers. Ignore anything off-topic.
+- Each trend must cite the numbered signal it came from via "sourceIndex" (the [N] number).
+- BE SPECIFIC: name garment + colour + silhouette + fabric. NOT "summer fashion".
+- BALANCE MEN AND WOMEN: ≥2 men's and ≥2 women's. Start each "description" with "Men", "Women", or "Unisex".
+- "productMatches": pick 1-4 REAL product titles from the DEBACKERS list above that fit this trend — copy titles EXACTLY. If none fit, use [].
 
 Return ONLY a JSON array of 4-5 trends in EXACTLY this shape:
 [{
-  "id": "kebab-id",
-  "name": "Trend name",
-  "arabicName": "الاسم بالعربي",
-  "platform": "tiktok|instagram|meta|google|multi",
-  "category": "aesthetic|color|style|product|sound|occasion",
-  "trendScore": 85,
-  "growthRate": 30,
-  "relevanceScore": 80,
-  "confidenceScore": 75,
-  "expectedPeakDays": 14,
-  "survivalRate": 60,
-  "signals": [{"source":"TikTok Egypt","metric":"hashtag views","value":"2.5M","weight":80,"direction":"up"}],
-  "historicalMatch": "short note or empty",
-  "lastYearOutcome": "short note or empty",
-  "competitorReaction": {"tieHouse":"...","britishHouse":"...","massimoDutti":"...","gap":"what none are doing"},
-  "catalogMatch": {"products":["..."],"readiness":"ready|partial|needs-sourcing","urgency":"act-now|prepare|monitor"},
-  "contentPrescription": {"format":["reel","tiktok"],"hook":"Arabic hook","hashtags":["#tag"],"sounds":["..."],"bestTime":"8-11pm"},
-  "description": "1-2 sentences"
+  "id": "kebab-id", "name": "Trend name", "arabicName": "الاسم بالعربي",
+  "platform": "tiktok|instagram|meta|google|multi", "category": "aesthetic|color|style|product|sound|occasion",
+  "trendScore": 85, "growthRate": 30, "relevanceScore": 80, "confidenceScore": 75, "expectedPeakDays": 14, "survivalRate": 60,
+  "sourceIndex": 1,
+  "signals": [{"source":"name","metric":"what","value":"x","weight":80,"direction":"up"}],
+  "historicalMatch": "", "lastYearOutcome": "",
+  "competitorReaction": {"tieHouse":"...","britishHouse":"...","massimoDutti":"...","gap":"..."},
+  "productMatches": ["exact product title from the list"],
+  "catalogMatch": {"readiness":"ready|partial|needs-sourcing","urgency":"act-now|prepare|monitor"},
+  "contentPrescription": {"format":["reel"],"hook":"Arabic hook","hashtags":["#tag"],"sounds":["..."],"bestTime":"8-11pm"},
+  "description": "Men/Women + 1-2 sentences"
 }]
-Base scores on the real search signals. Use Egyptian Arabic for hooks. Return ONLY the JSON array.`;
+Use Egyptian Arabic for hooks. Return ONLY the JSON array.`;
 
   const text = await callClaude(buildSystemPrompt(), prompt, 4500);
   const raw = parseJson<any[]>(text);
-  return { trends: raw.map((t, i) => normalizeTrend(t, i)), sources };
+  const byTitle = new Map(products.map((p) => [p.title.toLowerCase().trim(), p]));
+
+  const trends = raw.map((t, i) => {
+    const trend = normalizeTrend(t, i);
+    // Attach the REAL source (mapped from sourceIndex — never a hallucinated URL).
+    const idx = Number(t.sourceIndex);
+    if (idx >= 1 && idx <= sources.length) {
+      trend.evidenceTitle = sources[idx - 1].title;
+      trend.evidenceUrl = sources[idx - 1].url;
+    }
+    // Attach REAL products (only ones that actually exist in the catalog).
+    const matches = (Array.isArray(t.productMatches) ? t.productMatches : [])
+      .map((name: string) => byTitle.get(String(name).toLowerCase().trim()))
+      .filter(Boolean)
+      .slice(0, 4)
+      .map((p: any) => ({ title: p.title, image: p.image, url: p.url, price: p.price }));
+    trend.matchedProducts = matches;
+    return trend;
+  });
+
+  return { trends, sources };
 }
 
 // Fill any fields the model omitted so the UI never crashes on undefined.

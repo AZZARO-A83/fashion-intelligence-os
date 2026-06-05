@@ -53,4 +53,10 @@ export interface RichTrend {
   };
 
   description: string;
+
+  // The real source this trend was drawn from (so the user can validate it).
+  evidenceTitle?: string;
+  evidenceUrl?: string;
+  // Real Debackers products (from Shopify) that fit this trend.
+  matchedProducts?: { title: string; image: string; url: string; price: string }[];
 }
