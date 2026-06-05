@@ -1,6 +1,8 @@
 // AI client — Groq (free tier, Llama 3.3 70B)
 // OpenAI-compatible API, fast, free, good Arabic support
 
+import { recordGroqUsage } from "./cache";
+
 const GROQ_API_KEY = process.env.GROQ_API_KEY!;
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
@@ -34,6 +36,9 @@ export async function callGemini(
 
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content ?? "";
+
+  // Track how much of today's free budget this generation used.
+  await recordGroqUsage(data.usage?.total_tokens ?? 0);
 
   // Strip markdown code blocks if model wraps response
   return text.replace(/^```json\n?/m, "").replace(/\n?```$/m, "").trim();

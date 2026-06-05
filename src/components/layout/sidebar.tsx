@@ -20,6 +20,7 @@ import {
   LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AiBudget } from "./ai-budget";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -123,7 +124,8 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-3">
+        <AiBudget />
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center text-xs font-bold text-accent">
             AI

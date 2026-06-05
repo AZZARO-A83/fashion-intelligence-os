@@ -67,6 +67,37 @@ export function isFresh(iso: string | null | undefined, maxAgeSeconds: number): 
   return Date.now() - new Date(iso).getTime() < maxAgeSeconds * 1000;
 }
 
+// ─── Groq daily token budget tracking ────────────────────────────────
+// We count the tokens every generation actually spends, so the app can show
+// "X% of today's free budget used · ~N generations left" — no more guessing.
+export const GROQ_DAILY_LIMIT = 100_000; // free tier: 100k tokens/day
+
+function egyptDay(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
+export async function recordGroqUsage(tokens: number): Promise<void> {
+  if (!redis || !tokens || tokens < 0) return;
+  try {
+    const key = `groq:usage:${egyptDay()}`;
+    await redis.incrby(key, Math.round(tokens));
+    await redis.expire(key, 30 * 60 * 60); // 30h — covers the daily window
+  } catch {
+    /* never block a generation over usage tracking */
+  }
+}
+
+export async function getGroqUsedToday(): Promise<number> {
+  if (!redis) return 0;
+  try {
+    return (await redis.get<number>(`groq:usage:${egyptDay()}`)) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Stable keys for each shareable report type.
 export const CACHE_KEYS = {
   flash: "report:flash:latest",
