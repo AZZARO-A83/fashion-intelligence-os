@@ -149,16 +149,18 @@ function cleanSnippet(content: string, title: string): string {
 }
 
 export async function collectSources(
-  queries: { q: string; days?: number; topic?: "general" | "news" }[]
+  // domains: undefined = premium fashion sources (credibility). null = OPEN WEB
+  // (discovery — what Egyptians actually search/post/sell). Array = custom.
+  queries: { q: string; days?: number; topic?: "general" | "news"; domains?: string[] | null }[]
 ): Promise<Source[]> {
-  // Advanced depth = higher-quality, more authoritative results. We also run a
-  // NEWS pass so the user gets dated articles from real publishers, not just
-  // generic discovery pages.
   const runs = await Promise.all(
-    queries.flatMap(({ q, days, topic }) => [
-      withTimeout(tavilySearch(q, { days: days ?? 21, maxResults: 4, searchDepth: "advanced", topic: topic ?? "general", includeDomains: FASHION_SOURCE_DOMAINS }), 9000, FALLBACK),
-      withTimeout(tavilySearch(q, { days: days ?? 30, maxResults: 3, searchDepth: "advanced", topic: "news", includeDomains: FASHION_NEWS_DOMAINS }), 9000, FALLBACK),
-    ])
+    queries.flatMap(({ q, days, topic, domains }) => {
+      const inc = domains === null ? undefined : (domains ?? FASHION_SOURCE_DOMAINS);
+      return [
+        withTimeout(tavilySearch(q, { days: days ?? 21, maxResults: 4, searchDepth: "advanced", topic: topic ?? "general", includeDomains: inc }), 9000, FALLBACK),
+        withTimeout(tavilySearch(q, { days: days ?? 30, maxResults: 3, searchDepth: "advanced", topic: "news", includeDomains: domains === null ? undefined : FASHION_NEWS_DOMAINS }), 9000, FALLBACK),
+      ];
+    })
   );
   const seen = new Set<string>();
   const sources: Source[] = [];

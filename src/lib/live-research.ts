@@ -34,57 +34,71 @@ export interface LiveTrendsResult {
 }
 
 export async function generateLiveTrends(): Promise<LiveTrendsResult> {
-  // Live sources (men + women) + your REAL Shopify products, in parallel.
-  const [sources, products] = await Promise.all([
+  // EGYPT TREND RADAR — discovery-first. BROAD open-web search (what Egyptians
+  // actually search/post/sell) + premium editorial, men + women. Plus real products.
+  const [broad, premium, products] = await Promise.all([
     collectSources([
-      { q: "Egypt men's premium fashion trends 2026 suits shirts ملابس رجالي", days: 21 },
-      { q: "Egypt women's fashion trends 2026 dresses sets موضة نسائي", days: 21 },
-      { q: "Egyptian fashion week designers collections 2026", days: 45 },
+      { q: "Egyptian fashion trends 2026 موضة مصر ترند", days: 30, domains: null },
+      { q: "Egypt men women street style outfit 2026 تنسيقات لبس مصر", days: 30, domains: null },
+      { q: "Egyptian clothing brands new arrivals 2026 براندات مصرية ملابس", days: 30, domains: null },
+      { q: "Egyptian fashion influencers what's trending 2026 انفلونسرز موضة مصر", days: 30, domains: null },
+    ]),
+    collectSources([
+      { q: "Egypt premium menswear womenswear trends 2026", days: 45 },
     ]),
     getShopifyProductImages(40),
   ]);
+  // Dedupe + merge (broad = demand signals, premium = credibility).
+  const seen = new Set<string>();
+  const sources = [...broad, ...premium].filter((s) => (seen.has(s.url) ? false : (seen.add(s.url), true)));
 
   const searchText = sources.length
     ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${s.summary}`).join("\n")
     : "No fresh signals — use Egyptian seasonal context.";
-  const productList = products.length
-    ? products.map((p) => `${p.title} (${p.type})`).join("; ")
-    : "(no product list)";
+  const productList = products.length ? products.map((p) => `${p.title} (${p.type})`).join("; ") : "(none)";
 
-  const prompt = `You are a fashion trend analyst for DEBACKERS Egypt (premium men+women fashion).
-Identify the most relevant CURRENT trends — each MUST trace to a SPECIFIC numbered signal below. Do NOT invent generic seasonal trends. Quality over quantity.
+  const prompt = `You are a strict Egypt fashion-trend RADAR for DEBACKERS (premium men+women). Be evidence-based. Do NOT flatter trends. Do NOT invent.
+
+DISCOVER trends from the numbered signals below (don't start from a fixed list). A trend is only real for Egypt if Egyptian creators, brands, or customers show they care — not because it's globally trending.
 
 === LIVE SIGNALS (numbered — your ONLY source of truth) ===
 ${searchText}
 === END ===
 
-=== DEBACKERS REAL PRODUCTS (pick matches ONLY from this exact list) ===
+=== DEBACKERS REAL PRODUCTS (match ONLY from this exact list) ===
 ${productList}
 === END ===
 
+For each trend, HONESTLY score evidence. We can verify 3 signals from the search: (a) an Egyptian creator/article calls it a trend, (b) it repeats across multiple signals, (c) an Egyptian brand/e-commerce sells it. We CANNOT verify 2 signals with our tools: buying-intent comments, and Google Trends volume — list those under "signalsMissing" honestly, never fake them.
+
 Rules:
-- Each trend must cite the numbered signal it came from via "sourceIndex" (the [N] number).
-- BE SPECIFIC: name garment + colour + silhouette + fabric. NOT "summer fashion".
-- BALANCE MEN AND WOMEN: ≥2 men's and ≥2 women's. Start each "description" with "Men", "Women", or "Unisex".
-- "productMatches": pick 1-4 REAL product titles from the DEBACKERS list above that fit this trend — copy titles EXACTLY. If none fit, use [].
+- Cite the numbered signal via "sourceIndex".
+- BE SPECIFIC: garment + colour + silhouette + fabric. NOT "summer fashion".
+- BALANCE: ≥2 men's, ≥2 women's. Set "gender".
+- evidenceStrength: "strong" only if all 3 verifiable signals present; "medium" if 2; "weak" if 1 or mostly global.
+- "productMatches": 1-4 REAL titles copied EXACTLY from the list, or [].
+- recommendedAction: "campaign push" | "small stock test" | "content only" | "avoid".
 
-Return ONLY a JSON array of 4-5 trends in EXACTLY this shape:
+Return ONLY a JSON array of 4-6 trends:
 [{
-  "id": "kebab-id", "name": "Trend name", "arabicName": "الاسم بالعربي",
-  "platform": "tiktok|instagram|meta|google|multi", "category": "aesthetic|color|style|product|sound|occasion",
-  "trendScore": 85, "growthRate": 30, "relevanceScore": 80, "confidenceScore": 75, "expectedPeakDays": 14, "survivalRate": 60,
-  "sourceIndex": 1,
-  "signals": [{"source":"name","metric":"what","value":"x","weight":80,"direction":"up"}],
-  "historicalMatch": "", "lastYearOutcome": "",
-  "competitorReaction": {"tieHouse":"...","britishHouse":"...","massimoDutti":"...","gap":"..."},
-  "productMatches": ["exact product title from the list"],
-  "catalogMatch": {"readiness":"ready|partial|needs-sourcing","urgency":"act-now|prepare|monitor"},
-  "contentPrescription": {"format":["reel"],"hook":"Arabic hook","hashtags":["#tag"],"sounds":["..."],"bestTime":"8-11pm"},
-  "description": "Men/Women + 1-2 sentences"
+  "id":"kebab","name":"","arabicName":"","gender":"men|women|unisex",
+  "platform":"tiktok|instagram|google|multi","category":"aesthetic|color|style|product|occasion",
+  "trendScore":78,"growthRate":25,"relevanceScore":80,"confidenceScore":70,"expectedPeakDays":14,"survivalRate":60,
+  "evidenceStrength":"strong|medium|weak",
+  "signalsVerified":["Egyptian creator calls it a trend","sold by a local brand"],
+  "signalsMissing":["buying-intent comments not accessible","no Google Trends volume available"],
+  "recommendedAction":"campaign push|small stock test|content only|avoid",
+  "sourceIndex":1,
+  "signals":[{"source":"","metric":"","value":"","weight":80,"direction":"up"}],
+  "competitorReaction":{"tieHouse":"","britishHouse":"","massimoDutti":"","gap":""},
+  "productMatches":["exact title"],
+  "catalogMatch":{"readiness":"ready|partial|needs-sourcing","urgency":"act-now|prepare|monitor"},
+  "contentPrescription":{"format":["reel"],"hook":"Egyptian Arabic hook","hashtags":["#tag"],"sounds":["..."],"bestTime":"8-11pm"},
+  "description":"Men/Women + specific 1-2 sentences"
 }]
-Use Egyptian Arabic for hooks. Return ONLY the JSON array.`;
+Return ONLY the JSON array.`;
 
-  const text = await callClaude(buildSystemPrompt(), prompt, 4500);
+  const text = await callClaude(buildSystemPrompt(), prompt, 5000);
   const raw = parseJson<any[]>(text);
   const byTitle = new Map(products.map((p) => [p.title.toLowerCase().trim(), p]));
 
@@ -145,6 +159,11 @@ function normalizeTrend(t: any, i: number): RichTrend {
       bestTime: t.contentPrescription?.bestTime || "8–11pm",
     },
     description: t.description || "",
+    gender: t.gender === "men" || t.gender === "women" ? t.gender : "unisex",
+    evidenceStrength: ["strong", "medium", "weak"].includes(t.evidenceStrength) ? t.evidenceStrength : "weak",
+    signalsVerified: Array.isArray(t.signalsVerified) ? t.signalsVerified : [],
+    signalsMissing: Array.isArray(t.signalsMissing) ? t.signalsMissing : ["buying-intent comments not accessible", "no Google Trends volume available"],
+    recommendedAction: t.recommendedAction || "content only",
   };
 }
 

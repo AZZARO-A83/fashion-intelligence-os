@@ -59,4 +59,11 @@ export interface RichTrend {
   evidenceUrl?: string;
   // Real Debackers products (from Shopify) that fit this trend.
   matchedProducts?: { title: string; image: string; url: string; price: string }[];
+
+  // Egypt Trend Radar — honest evidence scoring.
+  gender?: "men" | "women" | "unisex";
+  evidenceStrength?: "strong" | "medium" | "weak";
+  signalsVerified?: string[];     // signals we COULD verify (creator mention, repeated, local brand)
+  signalsMissing?: string[];      // signals we could NOT (comments, Google Trends volume)
+  recommendedAction?: string;     // content-only / small stock test / campaign push / avoid
 }

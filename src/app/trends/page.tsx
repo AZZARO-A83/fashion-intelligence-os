@@ -202,6 +202,39 @@ function TrendCard({ trend }: { trend: RichTrend }) {
             </a>
           )}
 
+          {/* Honest evidence — what we could verify vs not */}
+          <div className="bg-surface-2 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Egypt Evidence</p>
+              {trend.evidenceStrength && (
+                <span className={cn("text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase",
+                  trend.evidenceStrength === "strong" ? "bg-green-400/10 text-green-400 border-green-400/20" :
+                  trend.evidenceStrength === "medium" ? "bg-amber-400/10 text-amber-400 border-amber-400/20" :
+                  "bg-zinc-400/10 text-zinc-400 border-zinc-400/20")}>
+                  {trend.evidenceStrength} evidence
+                </span>
+              )}
+              {trend.gender && <span className="text-[9px] text-muted capitalize">· {trend.gender}</span>}
+            </div>
+            {trend.signalsVerified && trend.signalsVerified.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {trend.signalsVerified.map((s, i) => (
+                  <p key={i} className="text-[10px] text-green-300 flex gap-1.5"><span className="text-green-400">✓</span>{s}</p>
+                ))}
+              </div>
+            )}
+            {trend.signalsMissing && trend.signalsMissing.length > 0 && (
+              <div className="space-y-1">
+                {trend.signalsMissing.map((s, i) => (
+                  <p key={i} className="text-[10px] text-amber-300/80 flex gap-1.5"><span className="text-amber-400">⚠</span>{s}</p>
+                ))}
+              </div>
+            )}
+            {trend.recommendedAction && (
+              <p className="text-[10px] text-accent mt-2 font-medium">→ Recommended: {trend.recommendedAction}</p>
+            )}
+          </div>
+
           {/* Content Prescription */}
           <div className="bg-surface-2 rounded-lg p-4">
             <div className="flex items-center gap-1.5 mb-3">
