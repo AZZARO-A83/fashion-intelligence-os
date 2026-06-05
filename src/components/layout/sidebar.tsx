@@ -4,47 +4,55 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  ShoppingCart,
   TrendingUp,
   Users,
-  Zap,
   PenTool,
-  Image,
-  BarChart3,
   Sparkles,
-  CalendarDays,
-  Bell,
   Briefcase,
-  FlameKindling,
-  CalendarRange,
-  LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AiBudget } from "./ai-budget";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/monthly-plan", label: "Monthly Plan", icon: CalendarDays, highlight: true },
-  { href: "/calendar", label: "Event Calendar", icon: CalendarRange },
-  { href: "/sales", label: "Sales Insights", icon: ShoppingCart },
-  { href: "/trends", label: "Trend Engine", icon: TrendingUp },
-  { href: "/trends/alerts", label: "Trend Alerts", icon: Bell },
-  { href: "/competitors", label: "Competitors", icon: Users },
-  { href: "/campaigns", label: "Campaigns", icon: Zap },
-  { href: "/content", label: "Content AI", icon: PenTool },
-  { href: "/inspiration", label: "Inspiration", icon: Image },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-];
-
-const agencyItems = [
-  { href: "/agency", label: "Agency Hub", icon: Briefcase },
-  { href: "/agency/flash", label: "Flash Brief", icon: FlameKindling, badge: "3-day" },
-  { href: "/agency/weekly", label: "Weekly Report", icon: CalendarRange },
-  { href: "/agency/monthly", label: "Monthly Strategy", icon: LineChart },
+// 5 clean sections. Sub-links appear only when you're inside that section —
+// so the top level is always just 5, no tab-maze.
+const SECTIONS = [
+  {
+    href: "/", label: "Overview", icon: LayoutDashboard,
+    subs: [
+      { href: "/sales", label: "Sales detail" },
+      { href: "/analytics", label: "Analytics" },
+    ],
+  },
+  {
+    href: "/trends", label: "Trends", icon: TrendingUp,
+    subs: [{ href: "/trends/alerts", label: "Urgent alerts" }],
+  },
+  { href: "/competitors", label: "Competitors", icon: Users, subs: [] },
+  {
+    href: "/content", label: "Create", icon: PenTool,
+    subs: [
+      { href: "/campaigns", label: "Campaigns" },
+      { href: "/inspiration", label: "Inspiration" },
+    ],
+  },
+  {
+    href: "/agency", label: "Reports", icon: Briefcase,
+    subs: [
+      { href: "/agency/flash", label: "Flash Brief (3-day)" },
+      { href: "/agency/weekly", label: "Weekly report" },
+      { href: "/agency/monthly", label: "Monthly strategy" },
+      { href: "/monthly-plan", label: "Monthly plan" },
+      { href: "/calendar", label: "Event calendar" },
+    ],
+  },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const inSection = (s: (typeof SECTIONS)[number]) =>
+    pathname === s.href ||
+    (s.href !== "/" && pathname.startsWith(s.href)) ||
+    s.subs.some((x) => pathname === x.href || pathname.startsWith(x.href));
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-surface border-r border-border flex flex-col z-50">
@@ -69,56 +77,46 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Nav — 5 sections */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon, highlight }) => {
-          const active = pathname === href;
+        {SECTIONS.map((s) => {
+          const Icon = s.icon;
+          const open = inSection(s);
+          const active = pathname === s.href;
           return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
-                active
-                  ? "bg-accent text-black"
-                  : (highlight && !active)
-                  ? "text-accent border border-accent/20 bg-accent/5 hover:bg-accent/10"
-                  : "text-foreground-muted hover:text-foreground hover:bg-surface-2"
+            <div key={s.href}>
+              <Link
+                href={s.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-150",
+                  active || (open && s.href !== "/")
+                    ? "bg-accent text-black"
+                    : "text-foreground-muted hover:text-foreground hover:bg-surface-2"
+                )}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                {s.label}
+              </Link>
+              {open && s.subs.length > 0 && (
+                <div className="ml-6 mt-1 mb-1 space-y-0.5 border-l border-border pl-3">
+                  {s.subs.map((sub) => {
+                    const subActive = pathname === sub.href;
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        className={cn(
+                          "block px-2 py-1.5 rounded-md text-xs transition-colors",
+                          subActive ? "text-accent font-medium" : "text-muted hover:text-foreground"
+                        )}
+                      >
+                        {sub.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
-            </Link>
-          );
-        })}
-
-        {/* Agency Intelligence Section */}
-        <div className="pt-4 pb-1">
-          <p className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted">
-            Agency Intelligence
-          </p>
-        </div>
-        {agencyItems.map(({ href, label, icon: Icon, badge }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
-                active
-                  ? "bg-accent text-black"
-                  : "text-foreground-muted hover:text-foreground hover:bg-surface-2"
-              )}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1">{label}</span>
-              {badge && (
-                <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-semibold">
-                  {badge}
-                </span>
-              )}
-            </Link>
+            </div>
           );
         })}
       </nav>
