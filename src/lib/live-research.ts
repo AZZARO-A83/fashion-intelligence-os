@@ -167,7 +167,7 @@ ${FABRIC_SLOTS}
 - "sourceIndex": e.g. "I2" (influence), "S3" (demand web), "L3" (live search). Use "both" if multiple layers confirm.
 - BE SPECIFIC: "women's floral wrap midi dress" not "summer fashion".
 - evidenceStrength: "strong" = 2+ layers confirm; "medium" = 1 layer solid; "weak" = single weak signal.
-- "productMatches": 1-4 EXACT product titles from the list above, or [].
+- "productMatches": 1-4 EXACT product titles from the list above, or []. STRICT: garment type must match exactly — polo trend → only polo products, shirt trend → only shirt products, dress → dress only. NEVER match a shirt to a polo trend or a polo to a shirt trend.
 - recommendedAction: "campaign push" | "small stock test" | "content only" | "avoid".
 
 Return ONLY a JSON array of 6 trends (exactly 6):

@@ -228,18 +228,25 @@ function TrendCard({ trend }: { trend: RichTrend }) {
               )}
               {trend.gender && <span className="text-[9px] text-muted capitalize">· {trend.gender}</span>}
             </div>
-            {trend.signalsVerified && trend.signalsVerified.length > 0 && (
+            {trend.signalsVerified && trend.signalsVerified.filter(s => !/^[ISLBislib]\d+$/.test(s.trim()) && s.trim().length > 3).length > 0 && (
               <div className="space-y-1 mb-2">
-                {trend.signalsVerified.map((s, i) => (
+                {trend.signalsVerified.filter(s => !/^[ISLBislib]\d+$/.test(s.trim()) && s.trim().length > 3).map((s, i) => (
                   <p key={i} className="text-[10px] text-green-300 flex gap-1.5"><span className="text-green-400">✓</span>{s}</p>
                 ))}
               </div>
             )}
             {trend.signalsMissing && trend.signalsMissing.length > 0 && (
               <div className="space-y-1">
-                {trend.signalsMissing.map((s, i) => (
-                  <p key={i} className="text-[10px] text-amber-300/80 flex gap-1.5"><span className="text-amber-400">⚠</span>{s}</p>
-                ))}
+                {trend.signalsMissing
+                  .filter(s => {
+                    // Hide "no live search data" when we actually have search data
+                    const hasSearchData = (trend.searchDemandMen?.length ?? 0) + (trend.searchDemandWomen?.length ?? 0) > 0;
+                    if (hasSearchData && /no live search/i.test(s)) return false;
+                    return true;
+                  })
+                  .map((s, i) => (
+                    <p key={i} className="text-[10px] text-amber-300/80 flex gap-1.5"><span className="text-amber-400">⚠</span>{s}</p>
+                  ))}
               </div>
             )}
             {trend.recommendedAction && (
