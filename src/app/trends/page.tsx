@@ -12,6 +12,9 @@ import {
   TrendingUp, Clock, Hash, Music, ChevronDown, ChevronRight,
   AlertCircle, BarChart3, ShoppingBag, Users, Zap, Filter, RefreshCw,
 } from "lucide-react";
+import { SearchDemandSection } from "@/components/trends/search-demand-section";
+import { MarketDemandSection } from "@/components/trends/market-demand-section";
+import { TrendGapAnalysis } from "@/components/trends/trend-gap-analysis";
 
 const URGENCY_STYLES = {
   "act-now": "bg-red-400/10 border-red-400/20 text-red-400",
@@ -74,6 +77,15 @@ function TrendCard({ trend }: { trend: RichTrend }) {
               <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold", URGENCY_STYLES[trend.catalogMatch.urgency])}>
                 {URGENCY_LABELS[trend.catalogMatch.urgency]}
               </span>
+              {trend.signalLayer === "influence" && (
+                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-orange-400/10 text-orange-300 border-orange-400/20 font-bold">🎙️ Influence-led</span>
+              )}
+              {trend.signalLayer === "search-demand" && (
+                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-blue-400/10 text-blue-300 border-blue-400/20 font-bold">🔍 Search-led</span>
+              )}
+              {trend.signalLayer === "both" && (
+                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-green-400/10 text-green-300 border-green-400/20 font-bold">✦ Influence + Search</span>
+              )}
               <span className="text-[10px] text-muted">
                 Peaks in <strong className="text-foreground">{trend.expectedPeakDays}</strong> days
               </span>
@@ -202,10 +214,10 @@ function TrendCard({ trend }: { trend: RichTrend }) {
             </a>
           )}
 
-          {/* LAYER 1 — TALKED ABOUT (content/awareness) */}
-          <div className="bg-surface-2 rounded-lg p-4">
+          {/* LAYER 1 — INFLUENCE (what influencers are leading) */}
+          <div className="bg-orange-400/5 border border-orange-400/20 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
-              <p className="text-[10px] font-bold text-orange-300 uppercase tracking-wider">🗣️ Talked about — Egypt evidence</p>
+              <p className="text-[10px] font-bold text-orange-300 uppercase tracking-wider">🎙️ Influence Layer — What influencers are leading</p>
               {trend.evidenceStrength && (
                 <span className={cn("text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase",
                   trend.evidenceStrength === "strong" ? "bg-green-400/10 text-green-400 border-green-400/20" :
@@ -246,7 +258,7 @@ function TrendCard({ trend }: { trend: RichTrend }) {
                   <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">🔍 Searched about — real demand</p>
                   <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-bold">LIVE</span>
                 </div>
-                <p className="text-[9px] text-muted mb-3">What real Egyptian consumers TYPE — colours, fabrics, clothing types. (Demand direction, not volume.)</p>
+                <p className="text-[9px] text-muted mb-3">What real Egyptian men and women TYPE into Google — colours, fabrics, clothing types. This is actual buying intent, independent of what influencers say.</p>
                 {has ? (
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
@@ -501,6 +513,15 @@ export default function TrendsPage() {
               <TrendCard key={trend.id} trend={trend} />
             ))}
         </div>
+
+        {/* Trends vs Best Sellers — gap analysis */}
+        {trends.length > 0 && <TrendGapAnalysis trends={trends} />}
+
+        {/* Market Demand — pure consumer search, independent of Debackers */}
+        <MarketDemandSection />
+
+        {/* Search Demand — per-trend autocomplete signals with product matching */}
+        {trends.length > 0 && <SearchDemandSection trends={trends} />}
 
       </div>
     </div>

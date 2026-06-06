@@ -1,18 +1,13 @@
-// ─── Web Search — Google Custom Search (real-time market intelligence) ─
-// Swapped from Tavily → Google Programmable Search. Credibility = the engine
-// (cx) is locked to the user's hand-picked trusted fashion/Egypt magazines,
-// so every result is from a real authority. Egypt bias via gl=eg. Free tier:
-// 100 queries/day (renews daily) — so we keep it to ONE call per query.
-// NOTE: function names kept (tavilySearch/collectSources/…) so the rest of
-// the app keeps working unchanged.
+// ─── Web Search — Serper (Google Search results via simple API) ──────────
+// Serper returns the same Google index — full credibility, Arabic + English,
+// Egyptian fashion content, competitor pages. 2,500 searches/month free.
+// NOTE: function names kept (tavilySearch/collectSources/…) so nothing else breaks.
 
-const GOOGLE_KEY = process.env.GOOGLE_SEARCH_KEY;
-const GOOGLE_CX = process.env.GOOGLE_SEARCH_CX;
-const CSE_URL = "https://www.googleapis.com/customsearch/v1";
+import { recordSerperUsage } from "@/lib/cache";
 
-// ─── Trusted fashion sources (now governed by the Google engine's cx) ──
-// Kept for reference + any caller that still imports them. The real source
-// restriction lives in the Programmable Search Engine's "Sites to search".
+const SERPER_KEY = process.env.SERPER_API_KEY;
+const SERPER_URL = "https://google.serper.dev/search";
+
 export const FASHION_SOURCE_DOMAINS = [
   "thebeesmagazine.com", "modash.io", "ellearabia.com",
   "harpersbazaararabia.com", "vogue.com", "businessoffashion.com",
@@ -32,7 +27,6 @@ interface TavilyResult {
   published_date?: string;
 }
 
-// Never block more than N ms per search.
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
     promise,
@@ -42,21 +36,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 
 const FALLBACK = { results: [] as TavilyResult[], error: "timeout" };
 
-// Best-effort published date from Google's pagemap metadata.
-function extractDate(item: Record<string, unknown>): string | undefined {
-  const pm = item.pagemap as { metatags?: Record<string, string>[]; newsarticle?: Record<string, string>[] } | undefined;
-  const meta = pm?.metatags?.[0] || {};
-  return (
-    meta["article:published_time"] ||
-    meta["article:modified_time"] ||
-    meta["og:updated_time"] ||
-    pm?.newsarticle?.[0]?.datepublished ||
-    undefined
-  );
-}
-
-// One Google Custom Search call. options kept for signature compatibility;
-// includeDomains/searchDepth are ignored (the engine's cx governs domains).
 export async function tavilySearch(
   query: string,
   options: {
@@ -67,56 +46,113 @@ export async function tavilySearch(
     topic?: "general" | "news";
     includeDomains?: string[];
   } = {}
-): Promise<{ results: TavilyResult[]; answer?: string; error?: string }> {
-  if (!GOOGLE_KEY || !GOOGLE_CX) {
-    return { results: [], error: "GOOGLE_SEARCH_KEY / GOOGLE_SEARCH_CX not set" };
+): Promise<{ results: TavilyResult[]; answer?: string; error?: string; _raw?: Record<string, unknown> }> {
+  if (!SERPER_KEY) {
+    return { results: [], error: "SERPER_API_KEY not set" };
   }
   try {
-    const num = Math.min(Math.max(options.maxResults ?? 8, 1), 10);
-    const days = Math.min(Math.max(options.days ?? 30, 1), 365);
-    const params = new URLSearchParams({
-      key: GOOGLE_KEY,
-      cx: GOOGLE_CX,
+    const num = Math.min(Math.max(options.maxResults ?? 15, 1), 20);
+    const body: Record<string, unknown> = {
       q: query,
-      num: String(num),
-      gl: "eg",            // Egypt geographic bias (soft, not a hard filter)
-      safe: "off",
-      dateRestrict: `d${days}`,
-    });
-    if (options.topic === "news") params.set("sort", "date");
+      gl: "eg",
+      hl: "en",
+      num,
+    };
+    if (options.topic === "news") body.type = "news";
 
-    const res = await fetch(`${CSE_URL}?${params.toString()}`);
-    if (!res.ok) {
-      // 429 = daily 100-query quota used up.
-      throw new Error(res.status === 429 ? "Google daily search limit reached" : `Google CSE ${res.status}`);
+    if (options.includeDomains && options.includeDomains.length > 0) {
+      const siteFilter = options.includeDomains.map((d) => `site:${d}`).join(" OR ");
+      body.q = `${query} (${siteFilter})`;
     }
+
+    const res = await fetch(SERPER_URL, {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Serper ${res.status}: ${await res.text()}`);
+    }
+
     const data = await res.json();
-    const items: Record<string, unknown>[] = Array.isArray(data.items) ? data.items : [];
-    const results: TavilyResult[] = items.map((it, i) => ({
+    const organic: Record<string, unknown>[] = Array.isArray(data.organic) ? data.organic : [];
+    const newsItems: Record<string, unknown>[] = Array.isArray(data.news) ? data.news : [];
+    const items = options.topic === "news" ? [...newsItems, ...organic] : [...organic, ...newsItems];
+
+    const results: TavilyResult[] = items.slice(0, num).map((it, i) => ({
       title: String(it.title || ""),
       url: String(it.link || ""),
       content: String(it.snippet || ""),
-      score: Math.max(0.5, 0.9 - i * 0.05), // Google returns by relevance → rank-based score
-      published_date: extractDate(it),
+      score: Math.max(0.5, 0.9 - i * 0.05),
+      published_date: it.date ? String(it.date) : undefined,
     }));
-    return { results };
+
+    recordSerperUsage(1);
+    return { results, _raw: data };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[GoogleCSE]", msg);
+    console.error("[Serper]", msg);
     return { results: [], error: msg };
   }
 }
 
+// ─── Dynamic customer search signals (from Serper relatedSearches) ───
+// Runs 3 broad Egypt fashion queries and extracts what customers are ACTUALLY
+// searching right now — relatedSearches + peopleAlsoAsk from Google.
+// Returns 10-20 unique real search queries, updated every generation.
+export interface DynamicSearchSignals {
+  menSignals: string[];
+  womenSignals: string[];
+  generalSignals: string[];
+}
+
+export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSignals> {
+  if (!SERPER_KEY) return { menSignals: [], womenSignals: [], generalSignals: [] };
+
+  const queries = [
+    { q: "men fashion Egypt 2026 trending", gender: "men" as const },
+    { q: "women fashion Egypt 2026 trending", gender: "women" as const },
+    { q: "Egyptian clothing trends what people buying 2026", gender: "general" as const },
+  ];
+
+  const results = await Promise.all(
+    queries.map(async ({ q }) => {
+      try {
+        const res = await fetch(SERPER_URL, {
+          method: "POST",
+          headers: { "X-API-KEY": SERPER_KEY!, "Content-Type": "application/json" },
+          body: JSON.stringify({ q, gl: "eg", hl: "en", num: 10 }),
+        });
+        if (!res.ok) return { related: [], paa: [] };
+        const data = await res.json();
+        recordSerperUsage(1);
+        const related: string[] = (data.relatedSearches || []).map((r: Record<string, string>) => r.query).filter(Boolean);
+        const paa: string[] = (data.peopleAlsoAsk || []).map((r: Record<string, string>) => r.question).filter(Boolean);
+        return { related, paa };
+      } catch { return { related: [], paa: [] }; }
+    })
+  );
+
+  // Fashion-only filter — drop non-buying queries
+  const fashionFilter = /\b(wear|cloth|outfit|dress|shirt|trouser|pant|linen|cotton|fabric|style|fashion|trend|colour|color|brand|buy|shop|summer|winter|casual|formal|look|collection)\b/i;
+  const clean = (arr: string[]) => arr.filter(s => fashionFilter.test(s) && s.length > 8 && s.length < 80);
+
+  return {
+    menSignals: clean([...results[0].related, ...results[0].paa]).slice(0, 15),
+    womenSignals: clean([...results[1].related, ...results[1].paa]).slice(0, 15),
+    generalSignals: clean([...results[2].related, ...results[2].paa]).slice(0, 10),
+  };
+}
+
 // ─── Format results for AI prompt ────────────────────────────────────
-// Truncates each result's content to keep total tokens under Groq's 12k/min
-// limit WITHOUT dropping any source. Every search, every URL, and the lead
-// fact (always at the top of a Tavily blurb) are preserved — only the
-// fluffy tail of each blurb is trimmed. Free, no crash, sources stay honest.
 const MAX_CONTENT_CHARS = 350;
 
 function truncateContent(content: string): string {
   if (!content || content.length <= MAX_CONTENT_CHARS) return content;
-  // Cut at the last sentence boundary before the limit, so we never end mid-word.
   const slice = content.slice(0, MAX_CONTENT_CHARS);
   const lastStop = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("? "), slice.lastIndexOf("! "));
   return (lastStop > 200 ? slice.slice(0, lastStop + 1) : slice).trim() + " …";
@@ -129,47 +165,41 @@ function formatResults(results: TavilyResult[]): string {
     .join("\n\n");
 }
 
-// ─── Source collection (for credibility / verification) ──────────────
-// Returns the REAL web sources behind a research run so the user can click
-// and verify every claim. Empty array means the live search returned nothing
-// (e.g. TAVILY_API_KEY missing) — the UI must then NOT claim "live".
 export interface Source {
   title: string;
   url: string;
   date?: string;
   score?: number;
-  summary?: string; // 1-2 line takeaway from the article so you know what's in it
+  summary?: string;
 }
 
-// Turn a raw page snippet into a clean 1-2 sentence summary — strips nav menus,
-// markdown headers, and the repeated title, then keeps the first real prose.
 function cleanSnippet(content: string, title: string): string {
-  // Title without the trailing " - publisher" so we can strip its repeats.
   const baseTitle = title.replace(/\s*[-|–]\s*[^-|–]+$/, "").trim();
   let s = content
-    .replace(/^#+\s*/gm, " ")                 // markdown headers
+    .replace(/^#+\s*/gm, " ")
     .replace(/\bloading\.\.\.?/gi, " ")
     .replace(/Automated translation[^.]*?original [a-z]{2}/gi, " ")
     .replace(/\bPRESS RELEASE\b/gi, " ")
     .replace(/\b(Home|Press|News|Fashion|Menu)\b/g, " ");
-  if (baseTitle.length > 6) s = s.split(baseTitle).join(" "); // remove ALL title repeats
+  if (baseTitle.length > 6) s = s.split(baseTitle).join(" ");
   s = s.replace(/\s+/g, " ").trim();
-  // Prefer the first sentence(s) with real substance (≥ 8 words).
   const sentences = s.split(/(?<=[.!?])\s+/).filter((t) => t.split(" ").length >= 8);
   const out = (sentences.slice(0, 2).join(" ") || s).trim();
   return out.length > 260 ? out.slice(0, 257).trimEnd() + "…" : out;
 }
 
 export async function collectSources(
-  // domains: undefined = premium fashion sources (credibility). null = OPEN WEB
-  // (discovery — what Egyptians actually search/post/sell). Array = custom.
   queries: { q: string; days?: number; topic?: "general" | "news"; domains?: string[] | null }[]
 ): Promise<Source[]> {
-  // ONE Google call per query (free tier = 100/day, so we don't double up).
   const runs = await Promise.all(
-    queries.map(({ q, days, topic }) =>
+    queries.map(({ q, days, topic, domains }) =>
       withTimeout(
-        tavilySearch(q, { days: days ?? 30, maxResults: 8, topic: topic ?? "general" }),
+        tavilySearch(q, {
+          days: days ?? 30,
+          maxResults: 8,
+          topic: topic ?? "general",
+          includeDomains: domains ?? undefined,
+        }),
         9000,
         FALLBACK
       )
@@ -177,7 +207,6 @@ export async function collectSources(
   );
   const seen = new Set<string>();
   const sources: Source[] = [];
-  // Drop junk: generic platform-only titles, no real content, or low relevance.
   const genericTitle = /^(instagram|tiktok|facebook|tik tok)\.?$/i;
   for (const r of runs) {
     for (const x of r.results ?? []) {
@@ -190,14 +219,11 @@ export async function collectSources(
       }
     }
   }
-  // Dated sources (real articles/posts) first, then by relevance.
   return sources.sort((a, b) => {
     if (!!a.date !== !!b.date) return a.date ? -1 : 1;
     return (b.score ?? 0) - (a.score ?? 0);
   });
 }
-
-// ─── Specialized searches for Egyptian fashion market ─────────────────
 
 export async function searchEgyptianFashionTrends(): Promise<string> {
   const D = FASHION_SOURCE_DOMAINS;

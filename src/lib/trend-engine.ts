@@ -67,6 +67,9 @@ export interface RichTrend {
   signalsMissing?: string[];      // signals we could NOT (comments, Google Trends volume)
   recommendedAction?: string;     // content-only / small stock test / campaign push / avoid
 
+  // Which signal layer drove this trend.
+  signalLayer?: "influence" | "search-demand" | "both";
+
   // 🔍 SEARCHED ABOUT — real demand (what people type into Google), free.
   searchSeed?: string;            // the keyword we checked demand for
   searchDemand?: string[];        // real autocomplete suggestions (demand direction)

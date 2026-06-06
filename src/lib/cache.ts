@@ -98,6 +98,37 @@ export async function getGroqUsedToday(): Promise<number> {
   }
 }
 
+// ─── Serper monthly search credit tracking ───────────────────────────
+// Free tier = 2,500 searches/month. We count every call so the UI can
+// show "X searches used · Y remaining this month".
+export const SERPER_MONTHLY_LIMIT = 2_500;
+
+function egyptMonth(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit",
+  }).format(new Date()); // "YYYY-MM"
+}
+
+export async function recordSerperUsage(calls: number = 1): Promise<void> {
+  if (!redis || calls <= 0) return;
+  try {
+    const key = `serper:usage:${egyptMonth()}`;
+    await redis.incrby(key, calls);
+    await redis.expire(key, 35 * 24 * 60 * 60); // 35 days covers the month
+  } catch {
+    /* never block a search over usage tracking */
+  }
+}
+
+export async function getSerperUsedThisMonth(): Promise<number> {
+  if (!redis) return 0;
+  try {
+    return (await redis.get<number>(`serper:usage:${egyptMonth()}`)) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Stable keys for each shareable report type.
 export const CACHE_KEYS = {
   flash: "report:flash:latest",
@@ -109,4 +140,5 @@ export const CACHE_KEYS = {
   campaigns: "live:campaigns:latest",
   alerts: "live:alerts:latest",
   inspiration: "live:inspiration:latest",
+  searchDemand: "live:search-demand:latest",
 } as const;
