@@ -24,8 +24,8 @@ export type { Source };
 // Tavily pulls wide. We only want signals about NEW colours, fabrics, and
 // clothing types — not celebrity galas, red carpets, heritage essays, museum
 // pieces, or award nights. Drop those before they ever reach the model.
-const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere)\b/i;
-const FASHION = /\b(colou?r|fabric|linen|cotton|denim|wool|silk|trouser|pant|chino|shirt|tee|polo|blazer|jacket|coat|knit|dress|skirt|abaya|kaftan|suit|collection|new arrival|silhouette|tailor|outfit|style|trend|wide.?leg|oversized|beige|stone|olive|navy|earth tone)\b/i;
+const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere|london fashion week|paris fashion week|milan fashion week|new york fashion week|uk fashion|british fashion|aw2[0-9]|autumn winter 202[0-9]|fw2[0-9]|winter coat|leather jacket|puffer|tweed|cashmere|fur coat)\b/i;
+const FASHION = /\b(colou?r|fabric|linen|cotton|denim|silk|trouser|pant|chino|shirt|tee|polo|blazer|jacket|dress|skirt|abaya|kaftan|suit|collection|new arrival|silhouette|tailor|outfit|style|trend|wide.?leg|oversized|beige|stone|olive|navy|earth tone|bamboo|modal|viscose|chiffon|poplin|jersey)\b/i;
 
 function refineSources(sources: Source[]): Source[] {
   const kept = sources.filter((s) => {
@@ -116,7 +116,7 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
     "SLOT B (Trend 2): PRIMARY fabric = VISCOSE, CHIFFON, or SILK — no linen, no beige",
     "SLOT C (Trend 3): PRIMARY fabric = DENIM, JERSEY, or POPLIN — no linen",
     "SLOT D (Trend 4): PRIMARY fabric = BAMBOO, MODAL, or TENCEL — no linen",
-    "SLOT E (Trend 5): PRIMARY fabric = WOOL, TWEED, or COTTON-BLEND — no linen",
+    "SLOT E (Trend 5): PRIMARY fabric = PIQUÉ, STRETCH-POPLIN, or COTTON-LINEN BLEND — no wool, no tweed (Egypt is hot)",
     "SLOT F (Trend 6): PRIMARY fabric = LINEN is ALLOWED here ONLY if search data supports it — otherwise use COTTON or POPLIN",
   ].join("\n");
 
@@ -146,6 +146,12 @@ ${dynamicText}
 === DEBACKERS REAL PRODUCTS (match ONLY from this exact list) ===
 ${productList}
 === END ===
+
+━━━ EGYPT CLIMATE + GEO RULES — NON-NEGOTIABLE ━━━
+Egypt is SUMMER RIGHT NOW (June 2026, 35–42°C in Cairo). This means:
+- NEVER include: leather, wool, tweed, cashmere, fur, heavy coats, puffer jackets, winter boots.
+- ONLY hot-weather fabrics: linen, cotton, bamboo, modal, viscose, chiffon, silk, piqué, poplin, jersey.
+- EGYPT ONLY: All trends must be verified in the Egyptian/Arab market. Discard UK, European, US, or global signals that have NO evidence of Egyptian search demand. London Fashion Week, Paris runways, Milan catwalks = irrelevant unless Egyptians are actively searching for it. If a source is from a UK/EU/US publication and has no Egypt angle, ignore it.
 
 ━━━ MANDATORY FABRIC ASSIGNMENTS — FOLLOW EXACTLY ━━━
 You MUST produce exactly 6 trends. Each trend is assigned a fabric slot below.
@@ -451,16 +457,19 @@ export interface LiveInspirationResult {
 export async function generateLiveInspiration(): Promise<LiveInspirationResult> {
   // DISTINCT identity: visual/colour direction for the UPCOMING season, men + women.
   const sources = await collectSources([
-    { q: "fashion colour palette autumn winter 2026 2027 trend forecast", days: 60 },
-    { q: "menswear womenswear key colours silhouettes upcoming season 2026", days: 60 },
-    { q: "Egypt fashion aesthetic mood 2026 editorial", days: 45 },
+    { q: "fashion colour palette spring summer 2026 Egypt trend forecast linen cotton", days: 60 },
+    { q: "Egypt menswear womenswear key colours silhouettes summer 2026 Cairo Sahel", days: 60 },
+    { q: "Egypt fashion aesthetic mood summer 2026 editorial North Coast", days: 45 },
   ]);
   const searchText = sources.length
     ? sources.map((s) => `- ${s.title}: ${s.summary}`).join("\n")
     : "Use Egyptian seasonal context + premium aesthetics.";
 
   const prompt = `You are a creative director for DEBACKERS Egypt (premium MEN + WOMEN fashion).
-Propose 4 visual mood boards for the UPCOMING season, grounded in the live signals below.
+Propose 4 visual mood boards for the CURRENT season in Egypt, grounded in the live signals below.
+
+Egypt is in SUMMER (June 2026, 35–42°C). Boards must reflect Egyptian summer: breathable fabrics (linen, cotton, bamboo, viscose), resort wear, North Coast/Sahel aesthetic, lightweight silhouettes.
+NEVER suggest: wool, leather, tweed, fur, heavy coats, or any cold-weather garment.
 
 === LIVE SIGNALS ===
 ${searchText}
@@ -468,7 +477,8 @@ ${searchText}
 
 Rules:
 - Include BOTH men's and women's boards (at least 1 each).
-- Name specific garments + silhouettes in the description (e.g. "men's relaxed wool overshirt", "women's bias-cut midi").
+- Name specific garments + silhouettes in the description (e.g. "men's relaxed linen shirt", "women's bias-cut viscose midi").
+- All garments must be wearable in 35–42°C heat — breathable fabrics only.
 - Colours must be real hex codes that match the direction.
 
 Return ONLY a JSON array of 4 boards:
