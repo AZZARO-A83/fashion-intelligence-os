@@ -102,7 +102,7 @@ async function fetchShopifyProductTypes(): Promise<Set<string>> {
   let cursor: string | null = null;
 
   for (let page = 0; page < 20; page++) {
-    const paginationArg = cursor ? `, after: "${cursor}"` : "";
+    const paginationArg: string = cursor ? `, after: "${cursor}"` : "";
     const query = `{ products(first: 50${paginationArg}) { edges { node { productType } } pageInfo { hasNextPage endCursor } } }`;
 
     const res = await fetch(`https://${SHOPIFY_URL}/admin/api/2025-01/graphql.json`, {
