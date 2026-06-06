@@ -32,6 +32,10 @@ export async function GET() {
     hasData: !!data?.data?.shopifyqlQuery,
     errors: data?.errors ?? null,
     tableData: data?.data?.shopifyqlQuery?.tableData ?? null,
+    // Diagnostics — never reveals full token, just enough to spot config mistakes
+    storeUrl: url,
+    tokenPrefix: token.slice(0, 10) + "...",
+    tokenLength: token.length,
     raw: JSON.stringify(data).slice(0, 500),
   });
 }
