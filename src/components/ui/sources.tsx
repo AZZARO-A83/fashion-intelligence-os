@@ -22,7 +22,7 @@ export function Sources({ sources }: { sources: Source[] }) {
           <p className="text-sm font-semibold text-amber-400 mb-1">No live sources found</p>
           <p className="text-xs text-foreground-muted">
             The live web search returned nothing this time — so treat this as an AI estimate, not verified live data.
-            (If this always happens, the TAVILY_API_KEY may not be set in Vercel.)
+            (If this always happens: Google&apos;s daily search limit may be used up, the trusted-site list returned no fresh articles, or GOOGLE_SEARCH_KEY / GOOGLE_SEARCH_CX aren&apos;t set in Vercel.)
           </p>
         </div>
       </div>

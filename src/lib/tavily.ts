@@ -1,31 +1,27 @@
-// ─── Tavily Web Search — Real-time market intelligence ───────────────
-// Used by the research engine to search the live web before generating reports
-// Searches TikTok trends, competitor pages, influencers, market news
+// ─── Web Search — Google Custom Search (real-time market intelligence) ─
+// Swapped from Tavily → Google Programmable Search. Credibility = the engine
+// (cx) is locked to the user's hand-picked trusted fashion/Egypt magazines,
+// so every result is from a real authority. Egypt bias via gl=eg. Free tier:
+// 100 queries/day (renews daily) — so we keep it to ONE call per query.
+// NOTE: function names kept (tavilySearch/collectSources/…) so the rest of
+// the app keeps working unchanged.
 
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-const TAVILY_URL = "https://api.tavily.com/search";
+const GOOGLE_KEY = process.env.GOOGLE_SEARCH_KEY;
+const GOOGLE_CX = process.env.GOOGLE_SEARCH_CX;
+const CSE_URL = "https://www.googleapis.com/customsearch/v1";
 
-// ─── Trusted fashion sources (user-curated) ──────────────────────────
-// Search is restricted to THESE domains so results are premium fashion /
-// journalist / organization sources — never random off-topic pages.
-// Based on the references the user provided + matching fashion authorities.
+// ─── Trusted fashion sources (now governed by the Google engine's cx) ──
+// Kept for reference + any caller that still imports them. The real source
+// restriction lives in the Programmable Search Engine's "Sites to search".
 export const FASHION_SOURCE_DOMAINS = [
-  "thebeesmagazine.com",      // Egyptian fashion magazine
-  "instagram.com",            // fashion accounts / Egypt Fashion Week / creators
-  "facebook.com",             // ELLE Egypt + brand pages
-  "modash.io",                // Egypt fashion influencer database
-  "ellearabia.com",           // ELLE Arabia
-  "harpersbazaararabia.com",  // Harper's Bazaar Arabia
-  "vogue.com",
-  "businessoffashion.com",
-  "scoopempire.com",          // Egypt culture/fashion
-  "fibre2fashion.com",        // fashion industry news (dated)
+  "thebeesmagazine.com", "modash.io", "ellearabia.com",
+  "harpersbazaararabia.com", "vogue.com", "businessoffashion.com",
+  "scoopempire.com", "fibre2fashion.com", "fustany.com", "gqmiddleeast.com",
 ];
 
-// Subset that publishes dated NEWS articles (for the news pass).
 const FASHION_NEWS_DOMAINS = [
   "fibre2fashion.com", "businessoffashion.com", "vogue.com",
-  "ellearabia.com", "harpersbazaararabia.com", "scoopempire.com",
+  "harpersbazaararabia.com", "scoopempire.com", "wwd.com",
 ];
 
 interface TavilyResult {
@@ -36,13 +32,7 @@ interface TavilyResult {
   published_date?: string;
 }
 
-interface TavilyResponse {
-  results: TavilyResult[];
-  answer?: string;
-}
-
-// ─── Core search function ─────────────────────────────────────────────
-// Timeout wrapper — never block more than 8 seconds per search
+// Never block more than N ms per search.
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
     promise,
@@ -50,47 +40,69 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   ]);
 }
 
+const FALLBACK = { results: [] as TavilyResult[], error: "timeout" };
+
+// Best-effort published date from Google's pagemap metadata.
+function extractDate(item: Record<string, unknown>): string | undefined {
+  const pm = item.pagemap as { metatags?: Record<string, string>[]; newsarticle?: Record<string, string>[] } | undefined;
+  const meta = pm?.metatags?.[0] || {};
+  return (
+    meta["article:published_time"] ||
+    meta["article:modified_time"] ||
+    meta["og:updated_time"] ||
+    pm?.newsarticle?.[0]?.datepublished ||
+    undefined
+  );
+}
+
+// One Google Custom Search call. options kept for signature compatibility;
+// includeDomains/searchDepth are ignored (the engine's cx governs domains).
 export async function tavilySearch(
   query: string,
   options: {
     maxResults?: number;
     searchDepth?: "basic" | "advanced";
     includeAnswer?: boolean;
-    days?: number; // how recent (days)
-    topic?: "general" | "news"; // "news" → dated articles from publishers
-    includeDomains?: string[];  // restrict to these domains only
+    days?: number;
+    topic?: "general" | "news";
+    includeDomains?: string[];
   } = {}
 ): Promise<{ results: TavilyResult[]; answer?: string; error?: string }> {
-  if (!TAVILY_API_KEY) {
-    return { results: [], error: "TAVILY_API_KEY not set" };
+  if (!GOOGLE_KEY || !GOOGLE_CX) {
+    return { results: [], error: "GOOGLE_SEARCH_KEY / GOOGLE_SEARCH_CX not set" };
   }
-
   try {
-    const res = await fetch(TAVILY_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${TAVILY_API_KEY}`,
-      },
-      body: JSON.stringify({
-        query,
-        max_results: options.maxResults ?? 5,
-        search_depth: options.searchDepth ?? "basic",
-        include_answer: options.includeAnswer ?? false,
-        days: options.days ?? 7,
-        topic: options.topic ?? "general",
-        include_domains: options.includeDomains ?? [],
-        exclude_domains: [],
-      }),
+    const num = Math.min(Math.max(options.maxResults ?? 8, 1), 10);
+    const days = Math.min(Math.max(options.days ?? 30, 1), 365);
+    const params = new URLSearchParams({
+      key: GOOGLE_KEY,
+      cx: GOOGLE_CX,
+      q: query,
+      num: String(num),
+      gl: "eg",            // Egypt geographic bias (soft, not a hard filter)
+      safe: "off",
+      dateRestrict: `d${days}`,
     });
+    if (options.topic === "news") params.set("sort", "date");
 
-    if (!res.ok) throw new Error(`Tavily search failed: ${res.status}`);
-    const data: TavilyResponse = await res.json();
-    return { results: data.results ?? [], answer: data.answer };
-
+    const res = await fetch(`${CSE_URL}?${params.toString()}`);
+    if (!res.ok) {
+      // 429 = daily 100-query quota used up.
+      throw new Error(res.status === 429 ? "Google daily search limit reached" : `Google CSE ${res.status}`);
+    }
+    const data = await res.json();
+    const items: Record<string, unknown>[] = Array.isArray(data.items) ? data.items : [];
+    const results: TavilyResult[] = items.map((it, i) => ({
+      title: String(it.title || ""),
+      url: String(it.link || ""),
+      content: String(it.snippet || ""),
+      score: Math.max(0.5, 0.9 - i * 0.05), // Google returns by relevance → rank-based score
+      published_date: extractDate(it),
+    }));
+    return { results };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[Tavily]", msg);
+    console.error("[GoogleCSE]", msg);
     return { results: [], error: msg };
   }
 }
@@ -153,14 +165,15 @@ export async function collectSources(
   // (discovery — what Egyptians actually search/post/sell). Array = custom.
   queries: { q: string; days?: number; topic?: "general" | "news"; domains?: string[] | null }[]
 ): Promise<Source[]> {
+  // ONE Google call per query (free tier = 100/day, so we don't double up).
   const runs = await Promise.all(
-    queries.flatMap(({ q, days, topic, domains }) => {
-      const inc = domains === null ? undefined : (domains ?? FASHION_SOURCE_DOMAINS);
-      return [
-        withTimeout(tavilySearch(q, { days: days ?? 21, maxResults: 4, searchDepth: "advanced", topic: topic ?? "general", includeDomains: inc }), 9000, FALLBACK),
-        withTimeout(tavilySearch(q, { days: days ?? 30, maxResults: 3, searchDepth: "advanced", topic: "news", includeDomains: domains === null ? undefined : FASHION_NEWS_DOMAINS }), 9000, FALLBACK),
-      ];
-    })
+    queries.map(({ q, days, topic }) =>
+      withTimeout(
+        tavilySearch(q, { days: days ?? 30, maxResults: 8, topic: topic ?? "general" }),
+        9000,
+        FALLBACK
+      )
+    )
   );
   const seen = new Set<string>();
   const sources: Source[] = [];
@@ -185,8 +198,6 @@ export async function collectSources(
 }
 
 // ─── Specialized searches for Egyptian fashion market ─────────────────
-
-const FALLBACK = { results: [], error: "timeout" };
 
 export async function searchEgyptianFashionTrends(): Promise<string> {
   const D = FASHION_SOURCE_DOMAINS;
