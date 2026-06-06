@@ -98,6 +98,22 @@ export async function getGroqUsedToday(): Promise<number> {
   }
 }
 
+// Overwrite the daily counter with Groq's authoritative header value.
+// Used to keep the bar in sync even when rate-limit errors prevent a normal response.
+export async function setGroqUsedToday(tokens: number): Promise<void> {
+  if (!redis || tokens <= 0) return;
+  try {
+    const key = `groq:usage:${egyptDay()}`;
+    const current = (await redis.get<number>(key)) ?? 0;
+    // Only update if the new value is higher — never roll back a higher reading.
+    if (tokens > current) {
+      await redis.set(key, tokens, { ex: 30 * 60 * 60 });
+    }
+  } catch {
+    /* never block a generation over usage tracking */
+  }
+}
+
 // ─── Serper monthly search credit tracking ───────────────────────────
 // Free tier = 2,500 searches/month. We count every call so the UI can
 // show "X searches used · Y remaining this month".
