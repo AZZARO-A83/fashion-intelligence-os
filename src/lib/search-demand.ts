@@ -109,17 +109,40 @@ function buildQueries(garment: string, gender: "men" | "women"): string[] {
 // Definitional / non-buying queries — drop them so the list is pure demand.
 const NOISE = /\b(history|origin|meaning|mean|means|definition|define|describe|what are|what is|why are|vs|versus|wikipedia|how much does|cost|price meaning)\b/i;
 
+// Non-English/Non-Arabic foreign language words (Portuguese, Spanish, French most common in autocomplete)
+const FOREIGN = /\b(vestido|camisa|pantalon|para|hombre|mujer|roupas?|calca|roupa|pour|homme|femme|moda|ropa|avec|leur|une|les|vêtement|kleid|pantalón|camiseta|vestir|usar)\b/i;
+
+// Geographic junk — UK/US suffixes that pollute Egypt-focused queries
+const GEO_JUNK = /\b(uk|united kingdom|britain|british|american|europe|european|dubai|saudi|gulf)\s*$/i;
+
+// Cold-weather items irrelevant to Egyptian summer (June–Sept, 35–42°C)
+const COLD_ITEMS = /\b(leather jacket|leather coat|wool coat|puffer jacket|puffer coat|down jacket|winter coat|heavy coat|sweater|sweatshirt|hoodie|turtleneck|cashmere coat|fleece|thermal|overcoat)\b/i;
+
+// Fuzzy key: strip prepositions/articles so "vestido de viscose" ≈ "vestido em viscose" dedup correctly
+function fuzzyKey(s: string): string {
+  return s.toLowerCase()
+    .replace(/\b(de|em|le|la|les|el|la|los|for|in|with|the|a|an|and|or)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
 async function topDemand(garment: string, gender: "men" | "women", limit: number): Promise<string[]> {
   const queries = Array.from(new Set(buildQueries(garment, gender)));
   const results = await Promise.all(queries.map((q) => fetchOnce(q).catch(() => [])));
 
   // Rank by frequency across angles, then by first appearance.
   const score = new Map<string, { phrase: string; count: number; order: number }>();
+  const fuzzySet = new Set<string>(); // for fuzzy dedup
   let order = 0;
   for (const list of results) {
     for (const raw of clean(list, [garment.toLowerCase()])) {
-      if (NOISE.test(raw)) continue; // skip definitional noise
+      if (NOISE.test(raw)) continue;
+      if (FOREIGN.test(raw)) continue;    // drop Portuguese/Spanish/French
+      if (GEO_JUNK.test(raw)) continue;  // drop "...uk", "...us" suffixes
+      if (COLD_ITEMS.test(raw)) continue; // drop cold-weather items (Egypt summer)
       const key = raw.toLowerCase();
+      const fkey = fuzzyKey(raw);
+      if (fuzzySet.has(fkey)) continue;  // near-duplicate — skip
+      fuzzySet.add(fkey);
       const cur = score.get(key);
       if (cur) cur.count += 1;
       else score.set(key, { phrase: raw, count: 1, order: order++ });

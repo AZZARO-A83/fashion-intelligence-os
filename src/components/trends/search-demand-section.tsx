@@ -34,12 +34,13 @@ interface DemandTerm {
 
 // ─── Constants ────────────────────────────────────────────────────────
 const GARMENT_WORDS = [
-  "suit","suits","blazer","blazers","jacket","jackets","coat","coats",
+  "suit","suits","blazer","blazers","jacket","jackets",
   "trouser","trousers","chino","chinos","pant","pants","jeans","denim",
   "polo","shirt","shirts","tee","top","blouse","kaftan","abaya",
   "dress","dresses","midi","maxi","mini","skirt","gown",
   "jumpsuit","romper","playsuit","co-ord","coord","set","sets",
-  "shorts","overall","overalls","cardigan","sweater","knit","knitwear",
+  "shorts","overall","overalls",
+  // removed: coat/coats, cardigan, sweater, knit, knitwear — cold-weather, irrelevant in Egyptian summer
 ];
 
 const CANONICAL: Record<string, string> = {
@@ -149,6 +150,12 @@ const ENGLISH_OR_ARABIC = /^[؀-ۿa-zA-Z0-9\s\-'.,&]+$/;
 const MEN_SIGNAL   = /\bfor men\b|\bmen's\b|\bmen s\b|\bmale\b/i;
 const WOMEN_SIGNAL = /\bfor women\b|\bwomen's\b|\bwomen s\b|\bladies\b|\bfemale\b/i;
 const NOISE = /\breview\b|\bcompar\b|\bvs\b|\bwikipedia\b|\bhistory\b|\borigin\b|\bmean\b/i;
+const FOREIGN_DISPLAY = /\b(vestido|camisa|pantalon|para|hombre|mujer|roupas?|pour|homme|femme|moda|ropa|avec|vêtement)\b/i;
+const GEO_JUNK_DISPLAY = /\b(uk|united kingdom|britain|american|europe|european)\s*$/i;
+const COLD_DISPLAY = /\b(leather jacket|leather coat|wool coat|puffer|down jacket|winter coat|sweater|sweatshirt|hoodie|turtleneck|cashmere coat|fleece|thermal)\b/i;
+function fuzzyKeyDisplay(s: string): string {
+  return s.toLowerCase().replace(/\b(de|em|le|la|les|el|los|for|in|with|the|a|an|and|or)\b/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function buildDemandList(
   trends: RichTrend[],
@@ -156,6 +163,7 @@ function buildDemandList(
   products: ShopifyProduct[]
 ): DemandTerm[] {
   const scoreMap = new Map<string, { score: number; order: number; garment: string }>();
+  const fuzzySet = new Set<string>();
   let order = 0;
   const opposite = gender === "men" ? WOMEN_SIGNAL : MEN_SIGNAL;
 
@@ -167,6 +175,12 @@ function buildDemandList(
       if (!ENGLISH_OR_ARABIC.test(t)) return;
       if (opposite.test(t)) return;
       if (NOISE.test(t)) return;
+      if (FOREIGN_DISPLAY.test(t)) return;   // drop Portuguese/Spanish/French
+      if (GEO_JUNK_DISPLAY.test(t)) return;  // drop "...uk" etc.
+      if (COLD_DISPLAY.test(t)) return;       // drop cold-weather items
+      const fkey = fuzzyKeyDisplay(t);
+      if (fuzzySet.has(fkey)) return;        // fuzzy dedup
+      fuzzySet.add(fkey);
       const key = t.toLowerCase();
       const w = 1 / (pos + 1);
       const cur = scoreMap.get(key);
