@@ -24,7 +24,7 @@ const LANGUAGES: { value: Language; label: string; flag: string }[] = [
   { value: "en", label: "English", flag: "🇬🇧" },
 ];
 
-const PLATFORMS = ["Instagram", "TikTok", "Facebook", "Email", "Twitter"];
+const PLATFORMS = ["Instagram", "TikTok", "Facebook", "Email"];
 
 const TONES = ["Casual & Fun", "Professional", "Urgent", "Inspirational", "Humorous", "Trendy"];
 

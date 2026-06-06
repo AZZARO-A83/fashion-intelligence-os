@@ -377,9 +377,9 @@ export default function TrendsPage() {
           <p className="text-xs font-semibold text-foreground mb-2">📊 How Trend Scores Are Calculated</p>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { icon: "📱", label: "Platform signals", desc: "TikTok + Instagram hashtag volume, growth rate, Egyptian creator activity" },
-              { icon: "🛒", label: "Shopify sales data", desc: "Actual Debackers product sales correlated with trend activity" },
-              { icon: "🔍", label: "Competitor reaction", desc: "Whether Tie House, British House, Massimo Dutti are already running this — gap = opportunity" },
+              { icon: "🔍", label: "Web search research", desc: "Live Serper search — Egyptian fashion articles, retailer activity, search result signals" },
+              { icon: "🛒", label: "Search demand", desc: "Google, Bing, DuckDuckGo autocomplete — what Egyptian shoppers actually type (Arabic + English)" },
+              { icon: "🤖", label: "AI analysis", desc: "Groq Llama 3.3 scores each trend for Egypt relevance, catalog fit, and timing" },
             ].map(({ icon, label, desc }) => (
               <div key={label} className="bg-surface-2 rounded-lg p-3">
                 <p className="text-xs font-semibold text-foreground mb-1">{icon} {label}</p>

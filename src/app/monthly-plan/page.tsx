@@ -107,8 +107,6 @@ function CampaignCard({ campaign, index }: { campaign: Campaign; index: number }
           </div>
 
           <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            <p className="text-xs font-bold text-accent">EGP {formatNumber(campaign.estimatedKPIs.revenue)}</p>
-            <p className="text-[10px] text-muted">est. revenue</p>
             {expanded ? <ChevronDown className="w-4 h-4 text-muted mt-1" /> : <ChevronRight className="w-4 h-4 text-muted mt-1" />}
           </div>
         </div>
@@ -171,13 +169,12 @@ function CampaignCard({ campaign, index }: { campaign: Campaign; index: number }
             </div>
 
             <div>
-              <p className="text-[10px] text-muted uppercase tracking-wider mb-1.5">KPIs</p>
-              <div className="grid grid-cols-2 gap-2">
+              <p className="text-[10px] text-muted uppercase tracking-wider mb-1.5">Directional Estimates</p>
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { label: "Reach", value: formatNumber(campaign.estimatedKPIs.reach) },
                   { label: "Engagement", value: formatNumber(campaign.estimatedKPIs.engagement) },
                   { label: "Conversions", value: campaign.estimatedKPIs.conversions },
-                  { label: "Revenue", value: `EGP ${formatNumber(campaign.estimatedKPIs.revenue)}` },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-surface-2 rounded-lg p-2 text-center">
                     <p className="text-xs font-bold text-foreground">{value}</p>
@@ -185,6 +182,7 @@ function CampaignCard({ campaign, index }: { campaign: Campaign; index: number }
                   </div>
                 ))}
               </div>
+              <p className="text-[9px] text-muted mt-2">AI rough direction only — not a revenue forecast</p>
             </div>
           </div>
 
@@ -376,12 +374,11 @@ export default function MonthlyPlanPage() {
             </div>
 
             {/* Plan Stats */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {[
                 { label: "Total Campaigns", value: plan.campaigns.length },
                 { label: "Content Pieces", value: plan.contentPlan.totalPosts ?? plan.campaigns.length * 8 },
                 { label: "Avg Confidence", value: `${Math.round(plan.campaigns.reduce((s, c) => s + c.confidenceScore, 0) / plan.campaigns.length)}%` },
-                { label: "Est. Revenue", value: `EGP ${formatNumber(plan.campaigns.reduce((s, c) => s + c.estimatedKPIs.revenue, 0))}` },
                 { label: "Competitors Tracked", value: dataUsed?.competitors.length ?? 3 },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-surface border border-border/50 rounded-xl p-4 text-center">

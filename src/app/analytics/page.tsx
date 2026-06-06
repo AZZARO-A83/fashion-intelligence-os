@@ -54,19 +54,17 @@ function SectionTitle({ title, sub, badge }: { title: string; sub?: string; badg
 // ─── Derive weekly pattern from real orders ───────────────────────────
 function buildWeeklyPattern(revenueByDay: { date: string; revenue: number; orders: number }[]) {
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const totals: Record<string, { sessions: number; orders: number; count: number }> = {};
-  days.forEach(d => { totals[d] = { sessions: 0, orders: 0, count: 0 }; });
+  const totals: Record<string, { orders: number; count: number }> = {};
+  days.forEach(d => { totals[d] = { orders: 0, count: 0 }; });
 
   revenueByDay.forEach(({ date, orders }) => {
     const dayName = days[new Date(date).getDay()];
     totals[dayName].orders += orders;
-    totals[dayName].sessions += orders * 22; // estimate ~22 sessions per order
     totals[dayName].count += 1;
   });
 
   return days.map(d => ({
     day: d,
-    sessions: totals[d].count > 0 ? Math.round(totals[d].sessions / totals[d].count) : 0,
     orders: totals[d].count > 0 ? Math.round(totals[d].orders / totals[d].count) : 0,
   }));
 }
