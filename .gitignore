@@ -27,3 +27,4 @@ npm-debug.log*
 
 # graphify knowledge-graph artifacts
 graphify-out/
+.vercel

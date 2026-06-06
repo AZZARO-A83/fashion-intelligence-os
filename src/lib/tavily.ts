@@ -57,6 +57,7 @@ export async function tavilySearch(
       gl: "eg",
       hl: "en",
       num,
+      tbs: "qdr:m4", // last 4 months — keeps results seasonal (summer now = summer content)
     };
     if (options.topic === "news") body.type = "news";
 
@@ -125,7 +126,7 @@ export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSign
         const res = await fetch(SERPER_URL, {
           method: "POST",
           headers: { "X-API-KEY": SERPER_KEY!, "Content-Type": "application/json" },
-          body: JSON.stringify({ q, gl: "eg", hl: "en", num: 10 }),
+          body: JSON.stringify({ q, gl: "eg", hl: "en", num: 10, tbs: "qdr:m4" }),
         });
         if (!res.ok) return { related: [], paa: [] };
         const data = await res.json();

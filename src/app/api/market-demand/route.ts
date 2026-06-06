@@ -62,38 +62,38 @@ function extractFabrics(terms: string[]): { fabric: string; count: number }[] {
 // Maps raw Shopify productType values to a canonical garment config.
 const SHOPIFY_TYPE_MAP: Record<string, { id: string; label: string; searchSeed: string; gender: "men" | "women" | "both" }> = {
   // Men
-  "shirts":         { id: "shirt-men",        label: "Shirt",          searchSeed: "shirt men",        gender: "men" },
-  "t-shirt":        { id: "tee-men",           label: "T-Shirt",        searchSeed: "t-shirt men",      gender: "men" },
-  "pants":          { id: "pants-men",         label: "Trousers",       searchSeed: "trouser men",      gender: "men" },
-  "pullover":       { id: "pullover-men",      label: "Pullover",       searchSeed: "pullover men",     gender: "men" },
-  "knitwear vest":  { id: "knit-vest-men",     label: "Knit Vest",      searchSeed: "knit vest men",    gender: "men" },
-  "vest sweater":   { id: "sweater-vest-men",  label: "Sweater Vest",   searchSeed: "sweater vest men", gender: "men" },
-  "knitwear jacket":{ id: "knit-jacket-men",   label: "Knitwear Jacket",searchSeed: "knitwear jacket men", gender: "men" },
-  "blazer":         { id: "blazer-men",        label: "Blazer",         searchSeed: "blazer men",       gender: "men" },
-  "suits":          { id: "suit-men",          label: "Suit",           searchSeed: "suit men",         gender: "men" },
+  "shirts":         { id: "shirt-men",        label: "Shirt",          searchSeed: "shirt men egypt",        gender: "men" },
+  "t-shirt":        { id: "tee-men",           label: "T-Shirt",        searchSeed: "t-shirt men egypt",      gender: "men" },
+  "pants":          { id: "pants-men",         label: "Trousers",       searchSeed: "trouser men egypt",      gender: "men" },
+  "pullover":       { id: "pullover-men",      label: "Pullover",       searchSeed: "pullover men egypt",     gender: "men" },
+  "knitwear vest":  { id: "knit-vest-men",     label: "Knit Vest",      searchSeed: "knit vest men egypt",    gender: "men" },
+  "vest sweater":   { id: "sweater-vest-men",  label: "Sweater Vest",   searchSeed: "sweater vest men egypt", gender: "men" },
+  "knitwear jacket":{ id: "knit-jacket-men",   label: "Knitwear Jacket",searchSeed: "knitwear jacket men egypt", gender: "men" },
+  "blazer":         { id: "blazer-men",        label: "Blazer",         searchSeed: "blazer men egypt",       gender: "men" },
+  "suits":          { id: "suit-men",          label: "Suit",           searchSeed: "suit men egypt",         gender: "men" },
   // Women
-  "womens shirts":  { id: "shirt-women",       label: "Shirt",          searchSeed: "shirt women",      gender: "women" },
-  "womens t-shirts":{ id: "tee-women",         label: "T-Shirt",        searchSeed: "t-shirt women",    gender: "women" },
-  "womens pants":   { id: "pants-women",       label: "Trousers",       searchSeed: "trouser women",    gender: "women" },
-  "dresses":        { id: "dress-women",       label: "Dress",          searchSeed: "dress women",      gender: "women" },
-  "blouse":         { id: "blouse-women",      label: "Blouse",         searchSeed: "blouse women",     gender: "women" },
-  "skirts":         { id: "skirt-women",       label: "Skirt",          searchSeed: "skirt women",      gender: "women" },
-  "sets":           { id: "set-women",         label: "Co-ord Set",     searchSeed: "co-ord set women", gender: "women" },
+  "womens shirts":  { id: "shirt-women",       label: "Shirt",          searchSeed: "shirt women egypt",      gender: "women" },
+  "womens t-shirts":{ id: "tee-women",         label: "T-Shirt",        searchSeed: "t-shirt women egypt",    gender: "women" },
+  "womens pants":   { id: "pants-women",       label: "Trousers",       searchSeed: "trouser women egypt",    gender: "women" },
+  "dresses":        { id: "dress-women",       label: "Dress",          searchSeed: "dress women egypt",      gender: "women" },
+  "blouse":         { id: "blouse-women",      label: "Blouse",         searchSeed: "blouse women egypt",     gender: "women" },
+  "skirts":         { id: "skirt-women",       label: "Skirt",          searchSeed: "skirt women egypt",      gender: "women" },
+  "sets":           { id: "set-women",         label: "Co-ord Set",     searchSeed: "co-ord set women egypt", gender: "women" },
 };
 
 // ─── Opportunity garments NOT in Debackers catalog ────────────────────
 // These are added so we can surface gaps / new product opportunities.
 const OPPORTUNITY_GARMENTS: Omit<GarmentDemand, "score" | "heatLevel" | "topSearches" | "fabrics" | "inCatalog">[] = [
-  { id: "polo-men",      label: "Polo",        searchSeed: "polo shirt men",   gender: "men" },
-  { id: "jeans-men",     label: "Jeans",       searchSeed: "jeans men",        gender: "men" },
-  { id: "shorts-men",    label: "Shorts",      searchSeed: "shorts men",       gender: "men" },
-  { id: "jacket-men",    label: "Jacket",      searchSeed: "jacket men",       gender: "men" },
-  { id: "cardigan-men",  label: "Cardigan",    searchSeed: "cardigan men",     gender: "men" },
-  { id: "kaftan-both",   label: "Kaftan",      searchSeed: "kaftan",           gender: "both" },
-  { id: "abaya-women",   label: "Abaya",       searchSeed: "abaya women",      gender: "women" },
-  { id: "jumpsuit-women",label: "Jumpsuit",    searchSeed: "jumpsuit women",   gender: "women" },
-  { id: "midi-women",    label: "Midi Dress",  searchSeed: "midi dress women", gender: "women" },
-  { id: "jeans-women",   label: "Jeans",       searchSeed: "jeans women",      gender: "women" },
+  { id: "polo-men",      label: "Polo",        searchSeed: "polo shirt men egypt",   gender: "men" },
+  { id: "jeans-men",     label: "Jeans",       searchSeed: "jeans men egypt",        gender: "men" },
+  { id: "shorts-men",    label: "Shorts",      searchSeed: "shorts men egypt",       gender: "men" },
+  { id: "jacket-men",    label: "Jacket",      searchSeed: "jacket men egypt",       gender: "men" },
+  { id: "cardigan-women",label: "Cardigan",    searchSeed: "cardigan women egypt", gender: "women" },
+  { id: "kaftan-both",   label: "Kaftan",      searchSeed: "kaftan egypt",     gender: "both" },
+  { id: "abaya-women",   label: "Abaya",       searchSeed: "abaya women egypt",      gender: "women" },
+  { id: "jumpsuit-women",label: "Jumpsuit",    searchSeed: "jumpsuit women egypt",   gender: "women" },
+  { id: "midi-women",    label: "Midi Dress",  searchSeed: "midi dress women egypt", gender: "women" },
+  { id: "jeans-women",   label: "Jeans",       searchSeed: "jeans women egypt",      gender: "women" },
 ];
 
 // ─── Fetch all unique Shopify product types ───────────────────────────

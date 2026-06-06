@@ -1,20 +1,32 @@
 import { NextResponse } from "next/server";
-import { getGroqUsedToday, GROQ_DAILY_LIMIT } from "@/lib/cache";
+import { getGroqUsedToday, GROQ_DAILY_LIMIT, getSerperUsedThisMonth, SERPER_MONTHLY_LIMIT } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
-// ~ average tokens a single generation spends (reports run higher, content lower)
 const AVG_PER_GENERATION = 9000;
 
-// Returns today's AI budget so the UI can show "X% used · ~N generations left".
 export async function GET() {
-  const used = await getGroqUsedToday();
-  const remaining = Math.max(0, GROQ_DAILY_LIMIT - used);
+  const [groqUsed, serperUsed] = await Promise.all([
+    getGroqUsedToday(),
+    getSerperUsedThisMonth(),
+  ]);
+
+  const groqRemaining = Math.max(0, GROQ_DAILY_LIMIT - groqUsed);
+  const serperRemaining = Math.max(0, SERPER_MONTHLY_LIMIT - serperUsed);
+
   return NextResponse.json({
-    used,
+    // Groq AI budget (daily)
+    used: groqUsed,
     limit: GROQ_DAILY_LIMIT,
-    remaining,
-    percentUsed: Math.min(100, Math.round((used / GROQ_DAILY_LIMIT) * 100)),
-    estGenerationsLeft: Math.floor(remaining / AVG_PER_GENERATION),
+    remaining: groqRemaining,
+    percentUsed: Math.min(100, Math.round((groqUsed / GROQ_DAILY_LIMIT) * 100)),
+    estGenerationsLeft: Math.floor(groqRemaining / AVG_PER_GENERATION),
+    // Serper search credits (monthly)
+    serper: {
+      used: serperUsed,
+      limit: SERPER_MONTHLY_LIMIT,
+      remaining: serperRemaining,
+      percentUsed: Math.min(100, Math.round((serperUsed / SERPER_MONTHLY_LIMIT) * 100)),
+    },
   });
 }
