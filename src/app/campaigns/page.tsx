@@ -55,11 +55,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2">
-            <div className="text-right">
-              <p className="text-xs font-bold text-accent">EGP {formatNumber(campaign.estimatedKPIs.revenue)}</p>
-              <p className="text-[10px] text-muted">est. revenue</p>
-            </div>
+          <div className="flex-shrink-0 self-center">
             {expanded ? <ChevronDown className="w-4 h-4 text-muted" /> : <ChevronRight className="w-4 h-4 text-muted" />}
           </div>
         </div>
@@ -128,14 +124,13 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Zap className="w-3 h-3 text-muted" />
-                  <span className="text-[10px] text-muted font-medium uppercase tracking-wider">Estimated KPIs</span>
+                  <span className="text-[10px] text-muted font-medium uppercase tracking-wider">Directional Estimates</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
                     { label: "Reach", value: formatNumber(campaign.estimatedKPIs.reach) },
                     { label: "Engagement", value: formatNumber(campaign.estimatedKPIs.engagement) },
                     { label: "Conversions", value: campaign.estimatedKPIs.conversions.toString() },
-                    { label: "Revenue", value: `EGP ${formatNumber(campaign.estimatedKPIs.revenue)}` },
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-surface-2 rounded-lg p-2 text-center">
                       <p className="text-xs font-bold text-foreground">{value}</p>
@@ -143,6 +138,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
                     </div>
                   ))}
                 </div>
+                <p className="text-[9px] text-muted mt-2">AI rough direction only — not a revenue forecast</p>
               </div>
             </div>
           </div>

@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { Badge } from "@/components/ui/badge";
-import { RichTrend, TrendSignal } from "@/lib/trend-engine";
+import { RichTrend } from "@/lib/trend-engine";
 import { GenerationError } from "@/components/ui/generation-error";
 import { Sources, type Source } from "@/components/ui/sources";
 import { cn, platformIcon, platformColor, timeAgo } from "@/lib/utils";
 import {
-  TrendingUp, Clock, Hash, Music, ChevronDown, ChevronRight,
-  AlertCircle, BarChart3, ShoppingBag, Users, Zap, Filter, RefreshCw,
+  TrendingUp, ChevronDown, ChevronRight,
+  AlertCircle, ShoppingBag, Zap, Filter, RefreshCw,
 } from "lucide-react";
 import { SearchDemandSection } from "@/components/trends/search-demand-section";
 import { MarketDemandSection } from "@/components/trends/market-demand-section";
@@ -28,25 +28,6 @@ const URGENCY_LABELS = {
   "monitor": "👁 Monitor",
 };
 
-function SignalBar({ signal }: { signal: TrendSignal }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="flex-shrink-0 w-24 text-[9px] text-muted text-right pt-0.5">{signal.source}</div>
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
-            <div
-              className={cn("h-full rounded-full transition-all", signal.direction === "up" ? "bg-green-400" : signal.direction === "down" ? "bg-red-400" : "bg-zinc-400")}
-              style={{ width: `${signal.weight}%` }}
-            />
-          </div>
-          <span className="text-[9px] text-muted w-8 text-right">{signal.weight}%</span>
-        </div>
-        <p className="text-[10px] text-foreground-muted leading-snug">{signal.metric}: <span className="text-foreground">{signal.value}</span></p>
-      </div>
-    </div>
-  );
-}
 
 function TrendCard({ trend }: { trend: RichTrend }) {
   const [expanded, setExpanded] = useState(false);
@@ -86,9 +67,6 @@ function TrendCard({ trend }: { trend: RichTrend }) {
               {trend.signalLayer === "both" && (
                 <span className="text-[9px] px-2 py-0.5 rounded-full border bg-green-400/10 text-green-300 border-green-400/20 font-bold">✦ Influence + Search</span>
               )}
-              <span className="text-[10px] text-muted">
-                Peaks in <strong className="text-foreground">{trend.expectedPeakDays}</strong> days
-              </span>
             </div>
 
             <p className="text-xs text-foreground-muted">{trend.description}</p>
@@ -108,40 +86,10 @@ function TrendCard({ trend }: { trend: RichTrend }) {
       {expanded && (
         <div className="border-t border-border p-5 space-y-5 animate-fade-in">
 
-          {/* Score Breakdown */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <BarChart3 className="w-3.5 h-3.5 text-accent" />
-              <p className="text-xs font-bold text-foreground">How Score {trend.trendScore}/100 Was Calculated</p>
-            </div>
-            <div className="space-y-3 bg-surface-2 rounded-lg p-4">
-              {trend.signals.map((signal, i) => (
-                <SignalBar key={i} signal={signal} />
-              ))}
-              <div className="pt-2 border-t border-border mt-2">
-                <p className="text-[10px] text-muted">
-                  Score = weighted average of {trend.signals.length} signals.
-                  Confidence: <strong className="text-foreground">{trend.confidenceScore}%</strong> ·
-                  Survival past 30 days: <strong className="text-foreground">{trend.survivalRate}%</strong>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* 3-column grid */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-surface-2 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-accent">{trend.relevanceScore}/100</p>
-              <p className="text-[10px] text-muted mt-0.5">Relevance to Debackers</p>
-            </div>
-            <div className="bg-surface-2 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-foreground">{trend.expectedPeakDays}d</p>
-              <p className="text-[10px] text-muted mt-0.5">Until Peak</p>
-            </div>
-            <div className="bg-surface-2 rounded-lg p-3 text-center">
-              <p className="text-lg font-bold text-foreground">{trend.survivalRate}%</p>
-              <p className="text-[10px] text-muted mt-0.5">30-Day Survival</p>
-            </div>
+          {/* Relevance */}
+          <div className="bg-surface-2 rounded-lg p-3 flex items-center gap-3">
+            <p className="text-lg font-bold text-accent">{trend.relevanceScore}/100</p>
+            <p className="text-xs text-muted">Relevance to Debackers catalog · confidence <strong className="text-foreground">{trend.confidenceScore}%</strong></p>
           </div>
 
           {/* Historical Context */}
@@ -155,29 +103,6 @@ function TrendCard({ trend }: { trend: RichTrend }) {
             </div>
           )}
 
-          {/* Competitor Reaction */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-2">
-              <Users className="w-3 h-3 text-muted" />
-              <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Competitor Reaction</p>
-            </div>
-            <div className="space-y-1.5">
-              {[
-                { name: "Tie House", reaction: trend.competitorReaction.tieHouse },
-                { name: "British House", reaction: trend.competitorReaction.britishHouse },
-                { name: "Massimo Dutti", reaction: trend.competitorReaction.massimoDutti },
-              ].map(({ name, reaction }) => (
-                <div key={name} className="flex gap-2 bg-surface-2 rounded-lg px-3 py-2">
-                  <span className="text-[10px] font-bold text-muted w-24 flex-shrink-0">{name}</span>
-                  <p className="text-[10px] text-foreground-muted">{reaction}</p>
-                </div>
-              ))}
-              <div className="flex gap-2 bg-green-400/5 border border-green-400/20 rounded-lg px-3 py-2">
-                <span className="text-[10px] font-bold text-green-400 w-24 flex-shrink-0">→ GAP</span>
-                <p className="text-[10px] text-green-300">{trend.competitorReaction.gap}</p>
-              </div>
-            </div>
-          </div>
 
           {/* Real Debackers products that match (live from Shopify) */}
           <div>
@@ -233,20 +158,6 @@ function TrendCard({ trend }: { trend: RichTrend }) {
                 {trend.signalsVerified.filter(s => !/^[ISLBislib]\d+$/.test(s.trim()) && s.trim().length > 3).map((s, i) => (
                   <p key={i} className="text-[10px] text-green-300 flex gap-1.5"><span className="text-green-400">✓</span>{s}</p>
                 ))}
-              </div>
-            )}
-            {trend.signalsMissing && trend.signalsMissing.length > 0 && (
-              <div className="space-y-1">
-                {trend.signalsMissing
-                  .filter(s => {
-                    // Hide "no live search data" when we actually have search data
-                    const hasSearchData = (trend.searchDemandMen?.length ?? 0) + (trend.searchDemandWomen?.length ?? 0) > 0;
-                    if (hasSearchData && /no live search/i.test(s)) return false;
-                    return true;
-                  })
-                  .map((s, i) => (
-                    <p key={i} className="text-[10px] text-amber-300/80 flex gap-1.5"><span className="text-amber-400">⚠</span>{s}</p>
-                  ))}
               </div>
             )}
             {trend.recommendedAction && (
@@ -488,7 +399,7 @@ export default function TrendsPage() {
             <div className="flex flex-wrap gap-2">
               {actNow.map((t) => (
                 <span key={t.id} className="text-xs bg-red-400/10 text-red-400 border border-red-400/20 px-3 py-1 rounded-full">
-                  {t.name} · {t.expectedPeakDays}d · score {t.trendScore}
+                  {t.name} · score {t.trendScore}
                 </span>
               ))}
             </div>
