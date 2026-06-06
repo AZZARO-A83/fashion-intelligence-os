@@ -15,9 +15,29 @@ import {
 } from "./tavily";
 import { RichTrend } from "./trend-engine";
 import { getShopifyProductImages } from "./shopify";
-import { getSearchDemand } from "./search-demand";
+import { getGenderedDemand } from "./search-demand";
 
 export type { Source };
+
+// ─── REFINE STEP ──────────────────────────────────────────────────────
+// Tavily pulls wide. We only want signals about NEW colours, fabrics, and
+// clothing types — not celebrity galas, red carpets, heritage essays, museum
+// pieces, or award nights. Drop those before they ever reach the model.
+const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere)\b/i;
+const FASHION = /\b(colou?r|fabric|linen|cotton|denim|wool|silk|trouser|pant|chino|shirt|tee|polo|blazer|jacket|coat|knit|dress|skirt|abaya|kaftan|suit|collection|new arrival|silhouette|tailor|outfit|style|trend|wide.?leg|oversized|beige|stone|olive|navy|earth tone)\b/i;
+
+function refineSources(sources: Source[]): Source[] {
+  const kept = sources.filter((s) => {
+    const text = `${s.title} ${s.summary}`;
+    // Keep if it talks about real garments/colours/fabrics AND isn't pure culture noise.
+    if (FASHION.test(text) && !JUNK.test(text)) return true;
+    // Borderline: has fashion words but also a junk word → keep only if fashion is strong.
+    if (FASHION.test(text)) return (text.match(FASHION) || []).length >= 1 && !/^.*\b(award|gala|cannes|red carpet)\b/i.test(s.title);
+    return false;
+  });
+  // Never starve the model — if the filter is too aggressive, fall back to originals.
+  return kept.length >= 3 ? kept : sources;
+}
 
 function parseJson<T>(text: string): T {
   // Strip code fences / stray prose, grab the outermost JSON.
@@ -39,19 +59,21 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   // actually search/post/sell) + premium editorial, men + women. Plus real products.
   const [broad, premium, products] = await Promise.all([
     collectSources([
-      { q: "Egyptian fashion trends 2026 موضة مصر ترند", days: 30, domains: null },
-      { q: "Egypt men women street style outfit 2026 تنسيقات لبس مصر", days: 30, domains: null },
-      { q: "Egyptian clothing brands new arrivals 2026 براندات مصرية ملابس", days: 30, domains: null },
-      { q: "Egyptian fashion influencers what's trending 2026 انفلونسرز موضة مصر", days: 30, domains: null },
+      { q: "new fashion colours fabrics Egypt 2026 ألوان وأقمشة موضة مصر", days: 30, domains: null },
+      { q: "Egypt men women new clothing styles linen cotton 2026 لبس جديد", days: 30, domains: null },
+      { q: "Egyptian clothing brands new arrivals shirts trousers dresses 2026 براندات", days: 30, domains: null },
+      { q: "trending fabrics silhouettes menswear womenswear Egypt 2026", days: 30, domains: null },
     ]),
     collectSources([
-      { q: "Egypt premium menswear womenswear trends 2026", days: 45 },
+      { q: "Egypt premium menswear womenswear new colours fabrics trends 2026", days: 45 },
     ]),
     getShopifyProductImages(40),
   ]);
   // Dedupe + merge (broad = demand signals, premium = credibility).
   const seen = new Set<string>();
-  const sources = [...broad, ...premium].filter((s) => (seen.has(s.url) ? false : (seen.add(s.url), true)));
+  const merged = [...broad, ...premium].filter((s) => (seen.has(s.url) ? false : (seen.add(s.url), true)));
+  // REFINE: keep only colour/fabric/clothing-type signals — drop celebrity/heritage noise.
+  const sources = refineSources(merged);
 
   const searchText = sources.length
     ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${s.summary}`).join("\n")
@@ -61,6 +83,8 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   const prompt = `You are a strict Egypt fashion-trend RADAR for DEBACKERS (premium men+women). Be evidence-based. Do NOT flatter trends. Do NOT invent.
 
 DISCOVER trends from the numbered signals below (don't start from a fixed list). A trend is only real for Egypt if Egyptian creators, brands, or customers show they care — not because it's globally trending.
+
+FOCUS ONLY ON WEARABLE FASHION DEMAND: new COLOURS, new FABRICS, and new CLOTHING TYPES/silhouettes for men and women. IGNORE and DO NOT output trends about celebrities, red carpets, award nights, heritage/history, museums, or culture essays — those are noise, not buying demand.
 
 === LIVE SIGNALS (numbered — your ONLY source of truth) ===
 ${searchText}
@@ -123,11 +147,21 @@ Return ONLY the JSON array.`;
     return trend;
   });
 
-  // 🔍 SEARCHED ABOUT — pull real Google search demand for each trend (free, parallel).
+  // 🔍 SEARCHED ABOUT — real consumer demand, split MEN vs WOMEN, top ~18 each
+  // (free autocomplete, parallel). These reveal the colours/fabrics/types people type.
   await Promise.all(
     trends.map(async (trend) => {
-      const seed = trend.searchSeed ? `${trend.searchSeed} egypt` : "";
-      trend.searchDemand = seed ? await getSearchDemand(seed) : [];
+      const seed = trend.searchSeed || trend.name || "";
+      if (!seed) {
+        trend.searchDemandMen = [];
+        trend.searchDemandWomen = [];
+        return;
+      }
+      const { men, women } = await getGenderedDemand(seed, 18);
+      trend.searchDemandMen = men;
+      trend.searchDemandWomen = women;
+      // keep the flat list too (back-compat / quick glance)
+      trend.searchDemand = [...men.slice(0, 3), ...women.slice(0, 3)];
     })
   );
 

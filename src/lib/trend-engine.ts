@@ -69,5 +69,7 @@ export interface RichTrend {
 
   // 🔍 SEARCHED ABOUT — real demand (what people type into Google), free.
   searchSeed?: string;            // the keyword we checked demand for
-  searchDemand?: string[];        // real Google autocomplete suggestions (demand direction)
+  searchDemand?: string[];        // real autocomplete suggestions (demand direction)
+  searchDemandMen?: string[];     // top searches men type about this garment
+  searchDemandWomen?: string[];   // top searches women type about this garment
 }
