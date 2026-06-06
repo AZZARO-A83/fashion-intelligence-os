@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calendar } from "lucide-react";
 
 export interface DateRange {
@@ -33,6 +33,13 @@ export function DateRangePicker({ value, onChange }: Props) {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
+  // Fire the default "7d" range on mount so the parent's initial fetch uses 7 days, not null (30d).
+  useEffect(() => {
+    const now = new Date();
+    onChange({ from: ymd(new Date(now.getTime() - 7 * 86400000)), to: ymd(now) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const pick = (preset: Preset) => {
     setActive(preset);
     const now = new Date();
@@ -41,7 +48,7 @@ export function DateRangePicker({ value, onChange }: Props) {
     // Shopify-style: "Last N days" starts N days before today (so today−7 .. today).
     if (preset === "today") onChange({ from: today, to: today });
     else if (preset === "48h") onChange({ from: ymd(new Date(now.getTime() - 2 * 86400000)), to: today });
-    else if (preset === "7d") onChange({ from: null, to: null }); // default (Egypt last 7 days)
+    else if (preset === "7d") onChange({ from: ymd(new Date(now.getTime() - 7 * 86400000)), to: today });
     else if (preset === "30d") onChange({ from: ymd(new Date(now.getTime() - 30 * 86400000)), to: today });
     // "custom" waits for the date inputs + Apply button below
   };

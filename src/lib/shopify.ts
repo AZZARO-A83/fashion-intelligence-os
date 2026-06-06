@@ -47,8 +47,8 @@ async function getRealOrders(minISO: string, maxISO: string): Promise<any[]> {
 
   while (keepGoing) {
     const endpoint: string = isFirstPage
-      ? `orders.json?status=any&created_at_min=${minISO}&created_at_max=${maxISO}&limit=250&fields=id,total_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`
-      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`;
+      ? `orders.json?status=any&created_at_min=${minISO}&created_at_max=${maxISO}&limit=250&fields=id,total_price,subtotal_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`
+      : `orders.json?limit=250&page_info=${pageInfo as string}&fields=id,total_price,subtotal_price,total_discounts,line_items,created_at,financial_status,refunds,customer,email`;
 
     const res = await shopifyFetchRaw(endpoint);
 
@@ -165,12 +165,17 @@ function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
 
   let gross = 0;
   let discounts = 0;
+  let orderLevelRefunds = 0; // ALL refunds on in-window orders (for AOV, matches Shopify formula)
   for (const o of created) {
     for (const it of o.line_items ?? []) gross += parseFloat(it.price) * it.quantity;
     discounts += parseFloat(o.total_discounts || 0);
+    for (const r of o.refunds ?? []) {
+      orderLevelRefunds += (r.refund_line_items ?? []).reduce(
+        (x: number, rli: any) => x + parseFloat(rli.subtotal || 0), 0);
+    }
   }
 
-  // Returns: any refund PROCESSED inside this window, even for older orders.
+  // Returns for net revenue: any refund PROCESSED inside this window, even for older orders.
   let returns = 0;
   for (const o of allOrders) {
     for (const r of o.refunds ?? []) {
@@ -181,8 +186,10 @@ function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
     }
   }
 
+  // Shopify AOV = (gross - order-level refunds) / orders — matches Shopify admin exactly.
+  const aovNet = gross - orderLevelRefunds;
   const net = gross - discounts - returns;
-  return { gross, discounts, returns, net, orderCount: created.length, created };
+  return { gross, discounts, returns, net, aovNet, orderCount: created.length, created };
 }
 
 // Process raw Shopify orders into analytics for the CURRENT window [fromMs, toMs].
@@ -202,8 +209,8 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const totalRevenue = Math.round(cur.net);          // 🟢 Shopify "Net sales"
   const totalOrders = cur.orderCount;
-  // Shopify computes AOV on a GROSS basis (gross ÷ orders), not net — match that.
-  const avgOrderValue = Math.round(cur.gross / totalOrders);
+  // Shopify AOV = (gross - order-level refunds) / orders — matches Shopify admin exactly.
+  const avgOrderValue = Math.round(cur.aovNet / totalOrders);
 
   // ─── Growth: current net vs equal prior period net ────────────────
   const pct = (now: number, prev: number) =>
@@ -211,8 +218,8 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const weeklyGrowthCalc = pct(cur.net, prior.net);
   const ordersGrowthCalc = pct(cur.orderCount, prior.orderCount);
-  const curAov = cur.orderCount ? cur.net / cur.orderCount : 0;
-  const priAov = prior.orderCount ? prior.net / prior.orderCount : 0;
+  const curAov = cur.orderCount ? cur.aovNet / cur.orderCount : 0;
+  const priAov = prior.orderCount ? prior.aovNet / prior.orderCount : 0;
   const aovGrowthCalc = pct(curAov, priAov);
 
   // ─── Repeat purchase rate — customers with 2+ orders (current window) ──

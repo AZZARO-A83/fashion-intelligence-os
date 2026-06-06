@@ -49,7 +49,7 @@ export function HelpButton({ section }: HelpButtonProps) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-7 z-50 w-72 bg-surface border border-border rounded-xl shadow-xl p-4 text-left animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="absolute right-0 top-7 z-50 w-72 bg-surface border border-border rounded-xl shadow-xl p-4 text-left animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="flex items-start justify-between gap-2 mb-2">
             <p className="text-xs font-bold text-accent uppercase tracking-wider">What this does</p>
             <button
