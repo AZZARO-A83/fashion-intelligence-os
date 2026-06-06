@@ -92,36 +92,97 @@ export interface GenderedDemand {
   women: string[];
 }
 
+// ─── Arabic garment vocabulary ─────────────────────────────────────────
+// Egyptian colloquial — what customers actually type on Google Egypt in Arabic
+const ARABIC_GARMENT: Record<string, string> = {
+  polo:     "بولو",
+  shirt:    "قميص",
+  trouser:  "بنطال",
+  chino:    "بنطال شينو",
+  denim:    "جينز",
+  jeans:    "جينز",
+  blazer:   "بليزر",
+  suit:     "بدلة",
+  dress:    "فستان",
+  jumpsuit: "جمبسوت",
+  skirt:    "تنورة",
+  abaya:    "عباءة",
+  kaftan:   "قفطان",
+  set:      "طقم",
+  coord:    "طقم",
+  shorts:   "شورت",
+  jacket:   "جاكيت",
+  linen:    "كتان",
+  cotton:   "قطن",
+  bamboo:   "بامبو",
+  viscose:  "فيسكوز",
+  silk:     "حرير",
+  chiffon:  "شيفون",
+  modal:    "مودال",
+  poplin:   "بوبلين",
+  pique:    "بيكيه",
+};
+
+const ARABIC_GENDER: Record<"men" | "women", string> = {
+  men:   "رجالي",
+  women: "نسائي",
+};
+
+function garmentToArabic(garment: string): string | null {
+  const g = garment.toLowerCase();
+  for (const [key, arabic] of Object.entries(ARABIC_GARMENT)) {
+    if (g.includes(key)) return arabic;
+  }
+  return null;
+}
+
 function buildQueries(garment: string, gender: "men" | "women"): string[] {
   const g = garment.toLowerCase().replace(/\s+egypt$/i, "").trim();
-  const w = gender; // "men" | "women"
-  // Each angle surfaces different autocomplete tails (colour, fabric, type, brand).
-  return [
+  const w = gender;
+  const ar = garmentToArabic(g);
+  const arG = ARABIC_GENDER[gender];
+
+  // English: 3 queries — minority (not all Egyptians search in English)
+  const queries: string[] = [
     `${g} ${w} egypt`,
     `${g} ${w}`,
-    `${w} ${g}`,
-    `${g} ${w} color`,
-    `${g} ${w} linen`,
     `${g} ${w} 2026`,
   ];
+
+  // Arabic: 5 queries — majority (most Egyptians search in Arabic)
+  // hasArabic() in each fetch function auto-switches to hl=ar / market=ar-EG / kl=eg-ar
+  if (ar) {
+    queries.push(
+      `${ar} ${arG} مصر`,   // e.g. "بولو رجالي مصر"
+      `${ar} ${arG}`,        // e.g. "بولو رجالي"
+      `${ar} مصر`,           // e.g. "بولو مصر"
+      `${ar} مصر 2026`,      // e.g. "بولو مصر 2026"
+      `${arG} ${ar}`,        // e.g. "رجالي بولو" — reversed order surfaces different tails
+    );
+  }
+
+  return queries;
 }
 
 // Definitional / non-buying queries — drop them so the list is pure demand.
 const NOISE = /\b(history|origin|meaning|mean|means|definition|define|describe|what are|what is|why are|vs|versus|wikipedia|how much does|cost|price meaning)\b/i;
 
 // Non-English/Non-Arabic foreign language words (Portuguese, Spanish, French most common in autocomplete)
-const FOREIGN = /\b(vestido|camisa|pantalon|para|hombre|mujer|roupas?|calca|roupa|pour|homme|femme|moda|ropa|avec|leur|une|les|vêtement|kleid|pantalón|camiseta|vestir|usar)\b/i;
+const FOREIGN = /\b(vestido|camisa|pantalon|para|hombre|mujer|roupas?|calca|roupa|pour|homme|femme|moda|ropa|avec|leur|une|les|kleid|pantalón|camiseta|vestir|usar)\b/i;
 
 // Geographic junk — UK/US suffixes that pollute Egypt-focused queries
 const GEO_JUNK = /\b(uk|united kingdom|britain|british|american|europe|european|dubai|saudi|gulf)\s*$/i;
 
 // Cold-weather items irrelevant to Egyptian summer (June–Sept, 35–42°C)
-const COLD_ITEMS = /\b(leather jacket|leather coat|wool coat|puffer jacket|puffer coat|down jacket|winter coat|heavy coat|sweater|sweatshirt|hoodie|turtleneck|cashmere coat|fleece|thermal|overcoat)\b/i;
+// Includes Arabic cold-weather terms: جلد=leather, صوف=wool, كنزة=sweater
+const COLD_ITEMS = /\b(leather jacket|leather coat|wool coat|puffer jacket|puffer coat|down jacket|winter coat|heavy coat|sweater|sweatshirt|hoodie|turtleneck|cashmere coat|fleece|thermal|overcoat)\b|جاكيت جلد|معطف جلد|معطف صوف|جاكيت شتوي|كنزة صوف|بلوفر شتوي/i;
 
-// Fuzzy key: strip prepositions/articles so "vestido de viscose" ≈ "vestido em viscose" dedup correctly
+// Fuzzy key: strip prepositions so near-duplicates collapse.
+// Arabic strings pass through as-is — Arabic prepositions are prefixes, not standalone words.
 function fuzzyKey(s: string): string {
+  if (hasArabic(s)) return s.trim();
   return s.toLowerCase()
-    .replace(/\b(de|em|le|la|les|el|la|los|for|in|with|the|a|an|and|or)\b/g, " ")
+    .replace(/\b(de|em|le|la|les|el|los|for|in|with|the|a|an|and|or)\b/g, " ")
     .replace(/\s+/g, " ").trim();
 }
 
