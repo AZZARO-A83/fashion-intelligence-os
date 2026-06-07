@@ -13,6 +13,23 @@ export interface CompetitorIntelligence {
   gaps: string[];
   threatLevel: "low" | "medium" | "high";
   lastUpdated: string;
+
+  // ─── Arabic intelligence layer (Egypt-first) ───────────────────────────
+  segment?: "premium" | "mass";
+  // AI-written Arabic-facing copy:
+  arabicSummary?: string;
+  arabicCounterAngle?: string;
+  arabicCampaignHook?: string;
+  arabicOfferInterpretation?: string;
+  // Deterministic signals detected by code (never invented by AI):
+  detectedKeywords?: { ar: string[]; en: string[] };
+  offerSignals?: { type: string; count: number }[];
+  garmentFocus?: string[];
+  topAngles?: string[];
+  genderSplit?: { men: number; women: number; unisex: number };
+  arabicEvidence?: { text: string; url: string }[];
+  englishEvidence?: { text: string; url: string }[];
+  signalCount?: number;
 }
 
 export interface DetectedCampaign {

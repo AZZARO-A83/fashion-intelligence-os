@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn, timeAgo } from "@/lib/utils";
 import { CompetitorIntelligence } from "@/lib/competitor-intelligence";
+import { COMPETITOR_BRANDS } from "@/lib/competitor-arabic";
 import { GenerationError } from "@/components/ui/generation-error";
 import { Sources, type Source } from "@/components/ui/sources";
 import {
@@ -12,23 +13,12 @@ import {
   Play, Megaphone, ShoppingBag, ChevronDown, ChevronRight, RefreshCw
 } from "lucide-react";
 
-// Meta Ad Library direct links per competitor
-const META_AD_LIBRARY_LINKS: Record<string, string> = {
-  "Tie House": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=EG&q=tie+house&search_type=keyword_unordered",
-  "British House": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=EG&q=british+house+egypt&search_type=keyword_unordered",
-  "Massimo Dutti": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=EG&q=massimo+dutti&search_type=keyword_unordered",
-};
+// Social + Meta Ad Library links come from the shared brand registry (all 6 brands).
+const BRAND_BY_NAME = new Map(COMPETITOR_BRANDS.map((b) => [b.name, b]));
 
-const INSTAGRAM_LINKS: Record<string, string> = {
-  "Tie House": "https://www.instagram.com/tiehouse/",
-  "British House": "https://www.instagram.com/british.house.official/",
-  "Massimo Dutti": "https://www.instagram.com/massimodutti/",
-};
-
-const TIKTOK_LINKS: Record<string, string> = {
-  "Tie House": "https://www.tiktok.com/@tiehouse",
-  "British House": "https://www.tiktok.com/@britishhouse",
-  "Massimo Dutti": "https://www.tiktok.com/@massimodutti",
+const SEGMENT_STYLES: Record<string, string> = {
+  premium: "bg-purple-400/10 text-purple-300 border-purple-400/20",
+  mass: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
 };
 
 const THREAT_COLORS = {
@@ -39,7 +29,10 @@ const THREAT_COLORS = {
 
 function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) {
   const [expanded, setExpanded] = useState(false);
-  const snap = competitor as any;
+  const brand = BRAND_BY_NAME.get(competitor.name);
+  const metaUrl = competitor.metaAdsUrl || brand?.metaAds || "#";
+  const igUrl = brand?.instagram || "#";
+  const ttUrl = brand?.tiktok || "#";
 
   return (
     <div className="bg-surface border border-border/50 rounded-xl overflow-hidden">
@@ -48,8 +41,13 @@ function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) 
       <div className="p-5 border-b border-border">
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h3 className="text-sm font-bold text-foreground">{competitor.name}</h3>
+              {competitor.segment && (
+                <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase", SEGMENT_STYLES[competitor.segment])}>
+                  {competitor.segment}
+                </span>
+              )}
               <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase", THREAT_COLORS[competitor.threatLevel])}>
                 {competitor.threatLevel} threat
               </span>
@@ -66,7 +64,7 @@ function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) 
 
           {/* Live Ad Library Button */}
           <a
-            href={META_AD_LIBRARY_LINKS[competitor.name]}
+            href={metaUrl}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-500/20 transition-colors"
@@ -79,12 +77,12 @@ function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) 
 
         {/* Social Links */}
         <div className="flex gap-2 mt-3">
-          <a href={INSTAGRAM_LINKS[competitor.name]} target="_blank" rel="noreferrer"
+          <a href={igUrl} target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 bg-pink-400/10 border border-pink-400/20 text-pink-400 px-2.5 py-1 rounded-lg text-[10px] font-medium hover:bg-pink-400/20 transition-colors">
             <Instagram className="w-3 h-3" /> Instagram
             <ExternalLink className="w-2.5 h-2.5" />
           </a>
-          <a href={TIKTOK_LINKS[competitor.name]} target="_blank" rel="noreferrer"
+          <a href={ttUrl} target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 bg-cyan-400/10 border border-cyan-400/20 text-cyan-400 px-2.5 py-1 rounded-lg text-[10px] font-medium hover:bg-cyan-400/20 transition-colors">
             🎵 TikTok
             <ExternalLink className="w-2.5 h-2.5" />
@@ -101,6 +99,99 @@ function CompetitorCard({ competitor }: { competitor: CompetitorIntelligence }) 
 
       {/* Intelligence Data */}
       <div className="p-5 space-y-4">
+
+        {/* 🇪🇬 Arabic Intelligence — Egypt-first */}
+        {(competitor.arabicSummary || competitor.arabicCampaignHook || competitor.arabicCounterAngle) && (
+          <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-bold text-accent uppercase tracking-wider">🇪🇬 Arabic Intelligence</p>
+              {competitor.signalCount !== undefined && (
+                <span className="text-[9px] text-muted">· {competitor.signalCount} live signals</span>
+              )}
+            </div>
+            {competitor.arabicSummary && (
+              <div>
+                <p className="text-[9px] text-muted mb-1">ملخص</p>
+                <p dir="rtl" className="text-xs text-foreground font-arabic leading-relaxed">{competitor.arabicSummary}</p>
+              </div>
+            )}
+            {competitor.arabicOfferInterpretation && (
+              <div>
+                <p className="text-[9px] text-muted mb-1">معنى العروض</p>
+                <p dir="rtl" className="text-xs text-foreground-muted font-arabic leading-relaxed">{competitor.arabicOfferInterpretation}</p>
+              </div>
+            )}
+            {competitor.arabicCounterAngle && (
+              <div className="bg-green-400/5 border border-green-400/20 rounded-lg px-3 py-2">
+                <p className="text-[9px] text-green-400 font-bold mb-1">رد ديباكرز</p>
+                <p dir="rtl" className="text-xs text-green-300 font-arabic leading-relaxed">{competitor.arabicCounterAngle}</p>
+              </div>
+            )}
+            {competitor.arabicCampaignHook && (
+              <div>
+                <p className="text-[9px] text-muted mb-1">هوك إعلاني جاهز</p>
+                <p dir="rtl" className="text-sm text-foreground font-arabic bg-surface rounded-lg px-3 py-2">{competitor.arabicCampaignHook}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Detected signals (deterministic — classified by code) */}
+        {((competitor.offerSignals?.length ?? 0) > 0 || (competitor.garmentFocus?.length ?? 0) > 0 ||
+          ((competitor.detectedKeywords?.ar.length ?? 0) + (competitor.detectedKeywords?.en.length ?? 0)) > 0) && (
+          <div className="space-y-2.5">
+            {competitor.offerSignals && competitor.offerSignals.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Offers detected</p>
+                <div className="flex flex-wrap gap-1">
+                  {competitor.offerSignals.slice(0, 6).map((o) => (
+                    <span key={o.type} className="text-[9px] bg-red-400/10 text-red-300 border border-red-400/20 px-2 py-0.5 rounded-full capitalize">{o.type.replace("-", " ")} ×{o.count}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {competitor.garmentFocus && competitor.garmentFocus.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Garment focus</p>
+                <div className="flex flex-wrap gap-1">
+                  {competitor.garmentFocus.map((g) => (
+                    <span key={g} className="text-[9px] bg-surface-2 text-foreground-muted px-2 py-0.5 rounded-full capitalize border border-border">{g}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {competitor.detectedKeywords && (competitor.detectedKeywords.ar.length + competitor.detectedKeywords.en.length) > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Keywords detected (AR + EN)</p>
+                <div className="flex flex-wrap gap-1">
+                  {competitor.detectedKeywords.ar.slice(0, 10).map((k, i) => (
+                    <span key={`a${i}`} dir="rtl" className="text-[9px] bg-surface-2 text-foreground-muted px-2 py-0.5 rounded-full font-arabic border border-border">{k}</span>
+                  ))}
+                  {competitor.detectedKeywords.en.slice(0, 8).map((k, i) => (
+                    <span key={`e${i}`} className="text-[9px] bg-surface-2 text-foreground-muted px-2 py-0.5 rounded-full border border-border">{k}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Evidence — both languages, clickable */}
+        {((competitor.arabicEvidence?.length ?? 0) > 0 || (competitor.englishEvidence?.length ?? 0) > 0) && (
+          <div>
+            <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Evidence</p>
+            <div className="space-y-1">
+              {competitor.arabicEvidence?.slice(0, 2).map((e, i) => (
+                <a key={`ae${i}`} href={e.url} target="_blank" rel="noreferrer" dir="rtl"
+                  className="block text-[10px] text-foreground-muted font-arabic bg-surface-2 rounded px-2 py-1 hover:text-accent truncate">{e.text}</a>
+              ))}
+              {competitor.englishEvidence?.slice(0, 2).map((e, i) => (
+                <a key={`ee${i}`} href={e.url} target="_blank" rel="noreferrer"
+                  className="block text-[10px] text-foreground-muted bg-surface-2 rounded px-2 py-1 hover:text-accent truncate">{e.text}</a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* AI Insights */}
         <div>
@@ -276,7 +367,7 @@ export default function CompetitorsPage() {
           <div className="bg-surface border border-dashed border-border rounded-xl p-12 text-center">
             <Users className="w-12 h-12 text-accent mx-auto mb-4 opacity-50" />
             <p className="text-foreground font-semibold mb-2">No competitor research yet</p>
-            <p className="text-sm text-muted mb-6">Click <strong>Research competitors</strong> — AI searches the live web for what Tie House, British House &amp; Massimo Dutti are doing right now.</p>
+            <p className="text-sm text-muted mb-6">Click <strong>Research competitors</strong> — searches the live web in <strong>Arabic &amp; English</strong> across 6 brands (Tie House, British House, Massimo Dutti, DeFacto, Town Team, LC Waikiki) and classifies their offers, garments &amp; campaign angles.</p>
           </div>
         )}
 
@@ -326,7 +417,7 @@ export default function CompetitorsPage() {
             <p className="text-xs text-muted mt-1">Competitors Tracked</p>
           </div>
           <div className="bg-surface border border-border/50 rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-red-400">1</p>
+            <p className="text-2xl font-bold text-red-400">{competitors.filter((c) => c.threatLevel === "high").length}</p>
             <p className="text-xs text-muted mt-1">High Threat</p>
           </div>
           <div className="bg-surface border border-border/50 rounded-xl p-4 text-center">

@@ -17,7 +17,6 @@ import { callClaude } from "./claude-api";
 import { buildSystemPrompt } from "./egyptian-context";
 import {
   searchEgyptianFashionTrends,
-  searchCompetitorActivity,
   searchMarketIntelligence,
   collectSources,
   getSerperDynamicSearchSignals,
@@ -382,8 +381,11 @@ function buildTrendFromCluster(
   };
 }
 
-// ─── LIVE COMPETITORS ─────────────────────────────────────────────────
+// ─── LIVE COMPETITORS (Arabic-first, deterministic signals → AI copy) ──────
 import { CompetitorIntelligence } from "./competitor-intelligence";
+import {
+  COMPETITOR_BRANDS, buildBrandQueries, classifySnippet, clusterBrandSignals, SnippetSignal,
+} from "./competitor-arabic";
 
 export interface LiveCompetitorReport {
   competitors: CompetitorIntelligence[];
@@ -392,53 +394,114 @@ export interface LiveCompetitorReport {
 }
 
 export async function generateLiveCompetitors(): Promise<LiveCompetitorReport> {
-  const [competitors, sources] = await Promise.all([
-    searchCompetitorActivity(),
-    collectSources([
-      { q: "Tie House Egypt fashion 2026 campaign collection", days: 30 },
-      { q: "British House Egypt fashion shirts 2026", days: 30 },
-      { q: "Massimo Dutti Egypt 2026 collection", days: 30 },
-      { q: "Egyptian premium fashion brands 2026 competition", days: 30 },
-    ]),
-  ]);
+  // 1) Per-brand: batched Arabic+English search → classify by code → cluster.
+  //    Noise is isolated here (snippet must mention the brand AND carry a
+  //    real offer/garment/angle signal; one-off signals are dropped later).
+  const perBrand = await Promise.all(
+    COMPETITOR_BRANDS.map(async (b) => {
+      const snippets = await collectSources(buildBrandQueries(b));
+      const signals = snippets
+        .map((s) => classifySnippet({ title: s.title, summary: s.summary, url: s.url }, b))
+        .filter((x): x is SnippetSignal => x !== null);
+      return { brand: b, snippets, cluster: clusterBrandSignals(signals) };
+    })
+  );
 
-  const prompt = `You are a competitive intelligence analyst for DEBACKERS Egypt (premium men+women fashion, Belgian heritage 1986).
-Using the LIVE web search results below, analyze Debackers' real competitors RIGHT NOW.
-
-=== LIVE COMPETITOR SEARCH ===
-${competitors}
-=== END ===
-
-Return ONLY this JSON:
-{
-  "competitors": [{
-    "name": "Tie House",
-    "website": "tiehouse.ae",
-    "insights": ["3-5 specific things they are doing now, from the search"],
-    "contentThemes": ["theme1","theme2"],
-    "pricingStrategy": "their pricing approach vs Debackers",
-    "gaps": ["2-3 openings Debackers can exploit"],
-    "threatLevel": "high|medium|low"
-  }],
-  "marketGaps": ["overall opening 1","opening 2","opening 3","opening 4"]
-}
-Cover Tie House, British House, Massimo Dutti Egypt, plus any other premium Egyptian brand the search surfaced. Return ONLY the JSON.`;
-
-  const text = await callClaude(buildSystemPrompt(), prompt, 4000);
-  const raw = parseJson<{ competitors: any[]; marketGaps: string[] }>(text);
-  const competitorsOut: CompetitorIntelligence[] = (raw.competitors ?? []).map((c) => ({
-    name: c.name || "Competitor",
-    website: c.website || "",
-    metaAdsUrl: "",
-    insights: Array.isArray(c.insights) ? c.insights : [],
-    campaigns: [],
-    contentThemes: Array.isArray(c.contentThemes) ? c.contentThemes : [],
-    pricingStrategy: c.pricingStrategy || "",
-    gaps: Array.isArray(c.gaps) ? c.gaps : [],
-    threatLevel: c.threatLevel || "medium",
-    lastUpdated: new Date().toISOString(),
+  // 2) Compact CLUSTERED payload — the AI explains, it never invents the signal.
+  const payload = perBrand.map(({ brand, cluster }) => ({
+    brand: brand.name,
+    segment: brand.segment,
+    signalCount: cluster.totalSignals,
+    strongOffers: cluster.strongOffers,
+    topOffers: cluster.offerCounts.slice(0, 4),
+    topGarments: cluster.garmentCounts.slice(0, 5),
+    topAngles: cluster.angleCounts.slice(0, 4),
+    genderSplit: cluster.genderSplit,
+    arabicKeywords: cluster.arabicKeywords.slice(0, 12),
+    evidenceAr: cluster.arabicEvidence.slice(0, 3).map((e) => e.text),
+    evidenceEn: cluster.englishEvidence.slice(0, 3).map((e) => e.text),
   }));
-  return { competitors: competitorsOut, marketGaps: raw.marketGaps ?? [], sources };
+
+  const prompt = `You are a competitive intelligence analyst for DEBACKERS Egypt (premium men + women fashion, Belgian heritage 1986). Cairo, summer June 2026.
+
+Below are PRE-CLASSIFIED competitor signals our system detected from REAL Arabic + English search results. Offer types, garments, angles and keywords are FIXED facts — do NOT change them or invent new ones. If a brand's signalCount is 0 or very low, say signals are thin / keep monitoring — do NOT fabricate activity.
+
+YOUR JOB: for each brand, interpret the signals into business meaning + Arabic-facing copy the Debackers team can use.
+
+SIGNALS (JSON):
+${JSON.stringify(payload, null, 1)}
+
+Return ONLY this JSON object:
+{
+  "competitors": {
+    "<exact brand name>": {
+      "insights": ["3-5 specific observations grounded ONLY in the signals above"],
+      "pricingStrategy": "their pricing approach vs Debackers",
+      "contentThemes": ["theme1","theme2","theme3"],
+      "gaps": ["2-3 openings Debackers can exploit"],
+      "threatLevel": "high|medium|low",
+      "arabicSummary": "جملة أو اتنين بالعامية المصرية بتلخص اللي البراند ده بيعمله دلوقتي",
+      "arabicOfferInterpretation": "العروض دي معناها ايه للسوق المصري (بالعربي)",
+      "arabicCounterAngle": "ازاي ديباكرز ترد على ده من غير ما تدخل حرب أسعار (بالعربي)",
+      "arabicCampaignHook": "هوك إعلاني جاهز بالعامية المصرية لديباكرز"
+    }
+  },
+  "marketGaps": ["overall opening 1","2","3","4"]
+}
+Cover EVERY brand in the signals (use the exact brand name as the key). Return ONLY the JSON.`;
+
+  let aiMap: Record<string, any> = {};
+  let marketGaps: string[] = [];
+  try {
+    const text = await callClaude(buildSystemPrompt(), prompt, 5000);
+    const raw = parseJson<{ competitors: Record<string, any>; marketGaps: string[] }>(text);
+    aiMap = raw.competitors || {};
+    marketGaps = Array.isArray(raw.marketGaps) ? raw.marketGaps : [];
+  } catch {
+    /* keep deterministic data even if the AI copy step fails */
+  }
+
+  const competitors: CompetitorIntelligence[] = perBrand.map(({ brand, cluster }) => {
+    const ai = aiMap[brand.name] || {};
+    const defThreat: "medium" | "low" = brand.segment === "premium" ? "medium" : "low";
+    return {
+      name: brand.name,
+      website: brand.website || "",
+      metaAdsUrl: brand.metaAds,
+      segment: brand.segment,
+      insights: Array.isArray(ai.insights) ? ai.insights : [],
+      campaigns: [],
+      contentThemes: Array.isArray(ai.contentThemes) ? ai.contentThemes
+        : cluster.angleCounts.slice(0, 4).map((a) => a.angle),
+      pricingStrategy: ai.pricingStrategy || "",
+      gaps: Array.isArray(ai.gaps) ? ai.gaps : [],
+      threatLevel: ["high", "medium", "low"].includes(ai.threatLevel) ? ai.threatLevel : defThreat,
+      lastUpdated: new Date().toISOString(),
+      arabicSummary: ai.arabicSummary || "",
+      arabicCounterAngle: ai.arabicCounterAngle || "",
+      arabicCampaignHook: ai.arabicCampaignHook || "",
+      arabicOfferInterpretation: ai.arabicOfferInterpretation || "",
+      detectedKeywords: { ar: cluster.arabicKeywords, en: cluster.englishKeywords },
+      offerSignals: cluster.offerCounts,
+      garmentFocus: cluster.garmentCounts.slice(0, 6).map((g) => g.garment),
+      topAngles: cluster.angleCounts.slice(0, 5).map((a) => a.angle),
+      genderSplit: cluster.genderSplit,
+      arabicEvidence: cluster.arabicEvidence,
+      englishEvidence: cluster.englishEvidence,
+      signalCount: cluster.totalSignals,
+    };
+  });
+
+  // Dedupe sources across all brands for the Sources panel.
+  const sources: Source[] = [];
+  const seen = new Set<string>();
+  for (const { snippets } of perBrand) {
+    for (const s of snippets) {
+      if (s.url && !seen.has(s.url)) { seen.add(s.url); sources.push(s); }
+    }
+  }
+
+  return { competitors, marketGaps, sources };
 }
 
 // ─── LIVE TREND ALERTS ────────────────────────────────────────────────
