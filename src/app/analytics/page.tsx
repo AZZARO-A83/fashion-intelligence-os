@@ -289,8 +289,8 @@ export default function AnalyticsPage() {
               <div className="bg-surface border border-border/50 rounded-xl p-5">
                 <SectionTitle
                   title="AI Sales Insights"
-                  sub="Claude-analyzed patterns from your sales data"
-                  badge={<span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-bold">🔵 AI RESEARCH</span>}
+                  sub="Groq-analyzed patterns from your real Shopify data · refreshes every 3 days"
+                  badge={<span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-bold">🔵 AI · 3-DAY CACHE</span>}
                 />
                 <div className="space-y-3">
                   {data.insights.map((insight: { metric?: string; value?: string; change?: number; explanation?: string } | string, i: number) => (

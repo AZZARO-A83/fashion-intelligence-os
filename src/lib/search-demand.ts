@@ -56,6 +56,32 @@ async function fetchOnce(query: string): Promise<string[]> {
   return [];
 }
 
+// Resolve after `ms` with a fallback — so one slow engine can't stall a batch.
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
+}
+
+// Like fetchOnce but ALSO reports which engine answered (for source diversity
+// scoring in the classifier). Each engine attempt is time-boxed.
+export async function fetchSuggestions(
+  query: string
+): Promise<{ suggestions: string[]; source: string }> {
+  const attempts: [string, () => Promise<string[]>][] = [
+    ["google", () => tryGoogle(query)],
+    ["bing", () => tryBing(query)],
+    ["duckduckgo", () => tryDuckDuckGo(query)],
+  ];
+  for (const [source, attempt] of attempts) {
+    try {
+      const r = await withTimeout(attempt(), 4500, [] as string[]);
+      if (r.length) return { suggestions: r, source };
+    } catch {
+      /* next source */
+    }
+  }
+  return { suggestions: [], source: "none" };
+}
+
 // Drop noise: the seed itself, dupes, pure brand/store spam optional.
 function clean(suggestions: string[], drop: string[]): string[] {
   const banned = new Set(drop.map((d) => d.toLowerCase().trim()));
@@ -215,8 +241,28 @@ async function topDemand(garment: string, gender: "men" | "women", limit: number
     .slice(0, limit);
 }
 
+// Garments that are inherently women-only — skip men's queries entirely
+const WOMEN_ONLY_GARMENT = /\b(dress|midi|maxi|mini dress|wrap dress|skirt|blouse|abaya|kaftan|gown|playsuit|romper)\b/i;
+
+// Garments that are inherently men-only
+const MEN_ONLY_GARMENT = /\b(necktie|neckties|cufflink|cufflinks|tie clips)\b/i;
+
 export async function getGenderedDemand(garment: string, limit = 18): Promise<GenderedDemand> {
   if (!garment) return { men: [], women: [] };
+
+  // Women-only garment — never build men's queries for dresses, skirts, blouses, abayas etc.
+  if (WOMEN_ONLY_GARMENT.test(garment)) {
+    const women = await topDemand(garment, "women", limit);
+    return { men: [], women };
+  }
+
+  // Men-only garment
+  if (MEN_ONLY_GARMENT.test(garment)) {
+    const men = await topDemand(garment, "men", limit);
+    return { men, women: [] };
+  }
+
+  // Unisex — run both
   const [men, women] = await Promise.all([
     topDemand(garment, "men", limit),
     topDemand(garment, "women", limit),

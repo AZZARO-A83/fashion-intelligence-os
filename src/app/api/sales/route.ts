@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 const SALES_TTL = 15 * 60;          // cache the heavy Shopify pull 15 min
 const INSIGHTS_KEY = "sales:insights";
-const INSIGHTS_TTL = 6 * 60 * 60;   // AI insights cached 6h
+const INSIGHTS_TTL = 72 * 60 * 60;  // AI insights cached 72h (3 days)
 
 type SalesResult = Awaited<ReturnType<typeof getSalesData>>;
 

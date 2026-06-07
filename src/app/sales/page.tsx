@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Sparkles, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   AreaChart, Area, CartesianGrid,
@@ -17,35 +17,6 @@ function fmtDay(iso: string) {
   return new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function InsightCard({ insight }: { insight: { metric?: string; value?: string; change?: number; trend?: string; explanation?: string } | string }) {
-  const text = typeof insight === "string" ? insight : insight.explanation ?? "";
-  const change = typeof insight === "object" ? insight.change : undefined;
-  const isUp = (change ?? 0) > 0;
-
-  return (
-    <div className="bg-surface-2 rounded-lg p-4 flex gap-3">
-      <div className={`w-1.5 rounded-full flex-shrink-0 ${isUp || change === undefined ? "bg-accent" : "bg-red-400"}`} />
-      <div>
-        {typeof insight === "object" && insight.metric && (
-          <p className="text-xs font-semibold text-foreground mb-1">{insight.metric}: {insight.value}</p>
-        )}
-        <p className="text-xs text-foreground-muted leading-relaxed">{text}</p>
-        {change !== undefined && (
-          <div className="flex items-center gap-1 mt-1.5">
-            {isUp ? (
-              <TrendingUp className="w-3 h-3 text-green-400" />
-            ) : (
-              <TrendingDown className="w-3 h-3 text-red-400" />
-            )}
-            <span className={`text-[10px] font-medium ${isUp ? "text-green-400" : "text-red-400"}`}>
-              {isUp ? "+" : ""}{change}% vs last period
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function SalesPage() {
   const [data, setData] = useState<SalesView | null>(null);
@@ -215,19 +186,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* AI Insights */}
-        <div className="bg-surface border border-border/50 rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-semibold text-foreground">AI Sales Insights</h2>
-            <Badge variant="accent">Claude-powered</Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {Array.isArray(data.insights) && data.insights.map((insight, i) => (
-              <InsightCard key={i} insight={insight} />
-            ))}
-          </div>
-        </div>
+        {/* AI insights moved to Analytics tab — see /analytics */}
 
       </div>
     </div>

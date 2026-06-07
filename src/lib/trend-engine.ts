@@ -75,4 +75,52 @@ export interface RichTrend {
   searchDemand?: string[];        // real autocomplete suggestions (demand direction)
   searchDemandMen?: string[];     // top searches men type about this garment
   searchDemandWomen?: string[];   // top searches women type about this garment
+
+  // ─── Deterministic cluster layer (classified BEFORE the AI) ──────────
+  // These come from the garment classifier, never from the model.
+  garmentType?: string;           // canonical garment (jeans, polo, dress…)
+  garmentFamily?: string;         // family (Pants, Shirts…)
+  catalogCategory?: string;       // Shopify catalog path
+  topFabric?: string | null;      // dominant fabric (sub-layer, never the trend itself)
+  topModifiers?: string[];        // baggy / black / wide-leg…
+  searchSignalCount?: number;     // unique real search signals behind this cluster
+  clusterScore?: number;          // deterministic 0–100 demand score
+  scoreBreakdown?: Record<string, number>;
+  inCatalog?: boolean;            // Debackers already sells this garment
+  opportunity?: boolean;          // demand exists but not in catalog yet
+}
+
+// ─── Search Demand Map (the deterministic table shown before AI trends) ───
+export interface DemandMapRow {
+  rank: number;
+  gender: string;
+  catalogCategory: string;
+  garmentType: string;
+  garmentLabel: string;
+  searchSignalCount: number;
+  topFabrics: string[];
+  topModifiers: string[];
+  topColors: string[];
+  topIntent: string;
+  inCatalog: boolean;
+  opportunity: boolean;
+  score: number;
+  confidence: "strong" | "medium" | "weak";
+  exampleQueries: string[];
+  scoreBreakdown: Record<string, number>;
+}
+
+// ─── Rejected query / Winter Backlog logging ──────────────────────────────
+export interface RejectedRow {
+  query: string;
+  reason: string;
+  source?: string;
+}
+
+export interface BacklogRow {
+  garmentType: string;
+  garmentLabel: string;
+  gender: string;
+  reason: string;
+  signalCount: number;
 }

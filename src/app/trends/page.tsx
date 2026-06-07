@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { Badge } from "@/components/ui/badge";
-import { RichTrend } from "@/lib/trend-engine";
+import { RichTrend, DemandMapRow, RejectedRow, BacklogRow } from "@/lib/trend-engine";
 import { GenerationError } from "@/components/ui/generation-error";
 import { Sources, type Source } from "@/components/ui/sources";
-import { cn, platformIcon, platformColor, timeAgo } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import {
   TrendingUp, ChevronDown, ChevronRight,
   AlertCircle, ShoppingBag, Zap, Filter, RefreshCw,
@@ -15,6 +15,8 @@ import {
 import { SearchDemandSection } from "@/components/trends/search-demand-section";
 import { MarketDemandSection } from "@/components/trends/market-demand-section";
 import { TrendGapAnalysis } from "@/components/trends/trend-gap-analysis";
+import { SearchDemandMap } from "@/components/trends/search-demand-map";
+import { RejectedBacklog } from "@/components/trends/rejected-backlog";
 
 const URGENCY_STYLES = {
   "act-now": "bg-red-400/10 border-red-400/20 text-red-400",
@@ -52,20 +54,29 @@ function TrendCard({ trend }: { trend: RichTrend }) {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap mb-2">
-              <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-medium capitalize", platformColor(trend.platform))}>
-                {platformIcon(trend.platform)} {trend.platform}
-              </span>
+              {trend.gender && (
+                <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold capitalize",
+                  trend.gender === "men" ? "bg-sky-400/10 text-sky-300 border-sky-400/20" :
+                  trend.gender === "women" ? "bg-pink-400/10 text-pink-300 border-pink-400/20" :
+                  "bg-purple-400/10 text-purple-300 border-purple-400/20")}>
+                  {trend.gender}
+                </span>
+              )}
+              {trend.garmentType && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full border bg-surface-2 text-foreground-muted border-border font-medium capitalize">
+                  {trend.garmentType}{trend.topFabric ? ` · ${trend.topFabric}` : ""}
+                </span>
+              )}
               <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold", URGENCY_STYLES[trend.catalogMatch.urgency])}>
                 {URGENCY_LABELS[trend.catalogMatch.urgency]}
               </span>
-              {trend.signalLayer === "influence" && (
-                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-orange-400/10 text-orange-300 border-orange-400/20 font-bold">🎙️ Influence-led</span>
-              )}
-              {trend.signalLayer === "search-demand" && (
-                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-blue-400/10 text-blue-300 border-blue-400/20 font-bold">🔍 Search-led</span>
-              )}
+              {trend.inCatalog ? (
+                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-green-400/10 text-green-400 border-green-400/20 font-bold">In catalog</span>
+              ) : trend.opportunity ? (
+                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-400 border-amber-400/20 font-bold">Opportunity</span>
+              ) : null}
               {trend.signalLayer === "both" && (
-                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-green-400/10 text-green-300 border-green-400/20 font-bold">✦ Influence + Search</span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full border bg-green-400/10 text-green-300 border-green-400/20 font-bold">✦ Search + Article</span>
               )}
             </div>
 
@@ -74,8 +85,8 @@ function TrendCard({ trend }: { trend: RichTrend }) {
 
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
             <div className="text-right">
-              <p className="text-xs font-bold text-green-400">+{trend.growthRate}%</p>
-              <p className="text-[9px] text-muted">weekly growth</p>
+              <p className="text-sm font-bold text-foreground">{trend.searchSignalCount ?? 0}</p>
+              <p className="text-[9px] text-muted">search signals</p>
             </div>
             {expanded ? <ChevronDown className="w-4 h-4 text-muted" /> : <ChevronRight className="w-4 h-4 text-muted" />}
           </div>
@@ -128,6 +139,31 @@ function TrendCard({ trend }: { trend: RichTrend }) {
               <p className="text-[10px] text-muted">No exact catalog match — consider sourcing for this trend.</p>
             )}
           </div>
+
+          {/* Competitor Reaction — per trend */}
+          {trend.competitorReaction && (
+            <div className="bg-red-400/5 border border-red-400/20 rounded-lg p-4">
+              <p className="text-[10px] font-bold text-red-300 uppercase tracking-wider mb-3">🏁 Competitor Reaction to This Trend</p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[
+                  { label: "Tie House", value: trend.competitorReaction.tieHouse },
+                  { label: "British House", value: trend.competitorReaction.britishHouse },
+                  { label: "Massimo Dutti", value: trend.competitorReaction.massimoDutti },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-surface-2 rounded-lg p-2.5">
+                    <p className="text-[9px] font-bold text-muted uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-[10px] text-foreground-muted leading-relaxed">{value || "—"}</p>
+                  </div>
+                ))}
+              </div>
+              {trend.competitorReaction.gap && (
+                <div className="flex gap-2 bg-green-400/5 border border-green-400/20 rounded-lg px-3 py-2">
+                  <span className="text-green-400 text-xs font-bold flex-shrink-0">→</span>
+                  <p className="text-xs text-green-300 leading-relaxed"><strong className="text-green-400">Gap: </strong>{trend.competitorReaction.gap}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Per-trend source — validate this trend */}
           {trend.evidenceUrl && (
@@ -265,6 +301,9 @@ export default function TrendsPage() {
   const [filter, setFilter] = useState<string>("all");
   const [trends, setTrends] = useState<RichTrend[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
+  const [demandMap, setDemandMap] = useState<DemandMapRow[]>([]);
+  const [rejected, setRejected] = useState<RejectedRow[]>([]);
+  const [backlog, setBacklog] = useState<BacklogRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -274,7 +313,14 @@ export default function TrendsPage() {
     fetch("/api/trends")
       .then((r) => r.json())
       .then((d) => {
-        if (d.trends?.length) { setTrends(d.trends); setSources(d.sources ?? []); setGeneratedAt(d.generatedAt); }
+        if (d.trends?.length || d.demandMap?.length) {
+          setTrends(d.trends ?? []);
+          setSources(d.sources ?? []);
+          setDemandMap(d.demandMap ?? []);
+          setRejected(d.rejected ?? []);
+          setBacklog(d.backlog ?? []);
+          setGeneratedAt(d.generatedAt);
+        }
       })
       .catch(() => {});
   }, []);
@@ -289,8 +335,11 @@ export default function TrendsPage() {
         throw new Error(`Generation failed: ${e.details || res.status}`);
       }
       const d = await res.json();
-      setTrends(d.trends);
+      setTrends(d.trends ?? []);
       setSources(d.sources ?? []);
+      setDemandMap(d.demandMap ?? []);
+      setRejected(d.rejected ?? []);
+      setBacklog(d.backlog ?? []);
       setGeneratedAt(d.generatedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -406,7 +455,16 @@ export default function TrendsPage() {
           </div>
         )}
 
+        {/* Search Demand Map — deterministic, before any AI trend */}
+        {demandMap.length > 0 && <SearchDemandMap rows={demandMap} />}
+
+        {/* Rejected & Winter Backlog — full transparency */}
+        {(rejected.length > 0 || backlog.length > 0) && (
+          <RejectedBacklog rejected={rejected} backlog={backlog} />
+        )}
+
         {/* Filter */}
+        {trends.length > 0 && (
         <div className="flex items-center gap-2">
           <Filter className="w-3.5 h-3.5 text-muted" />
           {filters.map((f) => (
@@ -422,6 +480,7 @@ export default function TrendsPage() {
             </button>
           ))}
         </div>
+        )}
 
         {/* Trend Cards */}
         <div className="space-y-3">

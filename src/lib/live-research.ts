@@ -1,47 +1,53 @@
 // ─── Live Research Engine ─────────────────────────────────────────────
 // Turns the previously-hardcoded research features (Trends, Competitors,
-// Campaigns) into REAL live data: Tavily web search → Groq analysis.
-// Every generator is cached by its route so it stays inside the free budget.
+// Campaigns) into REAL live data: Serper web search → Groq analysis.
+//
+// TREND ENGINE (rebuilt): deterministic-first.
+//   1. Probe real Egyptian search demand (autocomplete + Serper) for every
+//      garment Debackers sells (men + women), plus opportunity probes.
+//   2. CLASSIFY every raw query into structured layers BY CODE
+//      (gender → garment → fabric → modifier → intent). The AI never sees
+//      raw mixed text and never decides the garment type.
+//   3. Build gender+garment CLUSTERS, score them, season-guard them.
+//   4. Only then does Groq write the business copy for the top clusters.
+// "jeans" is a garment. "denim" is a fabric. A jeans search can NEVER become
+// a denim-jacket trend.
 
 import { callClaude } from "./claude-api";
 import { buildSystemPrompt } from "./egyptian-context";
 import {
   searchEgyptianFashionTrends,
   searchCompetitorActivity,
-  searchEgyptianInfluencers,
   searchMarketIntelligence,
   collectSources,
   getSerperDynamicSearchSignals,
   Source,
 } from "./tavily";
-import { RichTrend } from "./trend-engine";
+import { RichTrend, DemandMapRow, RejectedRow, BacklogRow } from "./trend-engine";
 import { getShopifyProductImages } from "./shopify";
-import { getGenderedDemand } from "./search-demand";
+import { fetchSuggestions } from "./search-demand";
+import { GARMENTS, currentSeasonEgypt, detectGarment } from "./catalog-taxonomy";
+import {
+  classifySearchQuery, buildDemandClusters, scoreCluster, applySeasonGuard,
+  buildTrendName, ClassifiedQuery, DemandCluster, ShopProduct,
+} from "./query-classifier";
 
 export type { Source };
 
-// ─── REFINE STEP ──────────────────────────────────────────────────────
-// Tavily pulls wide. We only want signals about NEW colours, fabrics, and
-// clothing types — not celebrity galas, red carpets, heritage essays, museum
-// pieces, or award nights. Drop those before they ever reach the model.
-const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere|london fashion week|paris fashion week|milan fashion week|new york fashion week|uk fashion|british fashion|aw2[0-9]|autumn winter 202[0-9]|fw2[0-9]|winter coat|leather jacket|puffer|tweed|cashmere|fur coat)\b/i;
+// ─── REFINE STEP (Layer 1/2 web sources for the Sources panel + article support) ─
+const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere|london fashion week|paris fashion week|milan fashion week|new york fashion week|uk fashion|british fashion|aw2[0-9]|autumn winter 202[0-9]|fw2[0-9]|winter coat|leather jacket|puffer|tweed|cashmere|fur coat|winter 202[0-9]|egypt safe|is egypt|safe to visit|travel guide|travel to egypt|egypt travel|egypt tourism|tourism in egypt|egypt tourist|life n style)\b/i;
 const FASHION = /\b(colou?r|fabric|linen|cotton|denim|silk|trouser|pant|chino|shirt|tee|polo|blazer|jacket|dress|skirt|abaya|kaftan|suit|collection|new arrival|silhouette|tailor|outfit|style|trend|wide.?leg|oversized|beige|stone|olive|navy|earth tone|bamboo|modal|viscose|chiffon|poplin|jersey)\b/i;
 
 function refineSources(sources: Source[]): Source[] {
-  const kept = sources.filter((s) => {
+  return sources.filter((s) => {
     const text = `${s.title} ${s.summary}`;
-    // Keep if it talks about real garments/colours/fabrics AND isn't pure culture noise.
     if (FASHION.test(text) && !JUNK.test(text)) return true;
-    // Borderline: has fashion words but also a junk word → keep only if fashion is strong.
-    if (FASHION.test(text)) return (text.match(FASHION) || []).length >= 1 && !/^.*\b(award|gala|cannes|red carpet)\b/i.test(s.title);
+    if (FASHION.test(text)) return !/^.*\b(award|gala|cannes|red carpet)\b/i.test(s.title);
     return false;
   });
-  // Never starve the model — if the filter is too aggressive, fall back to originals.
-  return kept.length >= 3 ? kept : sources;
 }
 
 function parseJson<T>(text: string): T {
-  // Strip code fences / stray prose, grab the outermost JSON.
   const cleaned = text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
   const start = cleaned.search(/[[{]/);
   const end = Math.max(cleaned.lastIndexOf("]"), cleaned.lastIndexOf("}"));
@@ -49,267 +55,330 @@ function parseJson<T>(text: string): T {
   return JSON.parse(slice) as T;
 }
 
-// ─── LIVE TRENDS ──────────────────────────────────────────────────────
+// ─── LIVE TRENDS (deterministic clusters → AI copy) ───────────────────────
 export interface LiveTrendsResult {
   trends: RichTrend[];
   sources: Source[];
+  demandMap: DemandMapRow[];
+  rejected: RejectedRow[];
+  backlog: BacklogRow[];
+}
+
+const MIN_SIGNALS = 3;     // a cluster needs ≥3 unique real searches to be a trend
+const TOP_TRENDS = 8;      // how many clusters get AI copy + trend cards
+const DEMAND_MAP_CAP = 24; // rows shown in the Search Demand Map
+
+const GENDER_WORD: Record<"men" | "women", string> = { men: "men", women: "women" };
+const AR_GENDER: Record<"men" | "women", string> = { men: "رجالي", women: "نسائي" };
+
+const GARMENT_LABELS: Record<string, string> = {
+  jeans: "Jeans", chino: "Chinos", pants: "Pants", shirt: "Shirts", overshirt: "Over-Shirt",
+  polo: "Polo Shirts", tshirt: "T-Shirts", blazer: "Blazers", suit: "Suits", jacket: "Jackets",
+  cardigan: "Cardigans", dress: "Dresses", skirt: "Skirts", blouse: "Blouses", top: "Tops",
+  set: "Co-ord Sets", jumpsuit: "Jumpsuits", abaya: "Abayas", kaftan: "Kaftans", shorts: "Shorts",
+  sweater: "Sweaters", hoodie: "Hoodies", coat: "Coats",
+};
+const label = (t: string) => GARMENT_LABELS[t] || t;
+
+interface Seed { garment: string; gender: "men" | "women"; en: string; ar: string; }
+
+// Build the seed list from the catalog taxonomy: every garment Debackers
+// actually sells (men + women), plus a few opportunity probes.
+function buildSeeds(): Seed[] {
+  const seeds: Seed[] = [];
+  const byType = new Map(GARMENTS.map((g) => [g.type, g]));
+  const push = (type: string, gender: "men" | "women") => {
+    const def = byType.get(type);
+    if (!def) return;
+    seeds.push({ garment: type, gender, en: def.en[0], ar: def.ar[0] || def.en[0] });
+  };
+  for (const g of GARMENTS) {
+    if (g.catalog.men) push(g.type, "men");
+    if (g.catalog.women) push(g.type, "women");
+  }
+  // Opportunity probes — demand we may not sell yet:
+  push("jacket", "men"); push("jacket", "women");
+  push("jumpsuit", "women"); push("shorts", "men");
+  push("abaya", "women"); push("kaftan", "women");
+  return seeds;
+}
+
+function seedQueries(s: Seed): string[] {
+  return [
+    `${s.en} ${GENDER_WORD[s.gender]} egypt`,
+    `${s.ar} ${AR_GENDER[s.gender]} مصر`,
+    `${s.ar} ${AR_GENDER[s.gender]}`,
+  ];
 }
 
 export async function generateLiveTrends(): Promise<LiveTrendsResult> {
-  // ── Three parallel data pulls ─────────────────────────────────────────
-  // Layer 1 — INFLUENCE: Egyptian influencers / creators / editorial leading trends
-  // Layer 2 — SEARCH DEMAND: live Serper relatedSearches + broad customer queries
-  // Also: Shopify catalog for product matching
-  const [influenceSources, demandSources, dynamicSignals, products] = await Promise.all([
-    // ── INFLUENCE LAYER — 15-20 sources ─────────────────────────────────
-    collectSources([
-      { q: "Egyptian fashion influencers men women 2026 trending outfits مؤثرين موضة مصر", days: 21, domains: null },
-      { q: "Egypt TikTok Instagram fashion creators style new collection 2026", days: 14, domains: null },
-      { q: "Egyptian style leaders premium editorial menswear womenswear 2026", days: 30 },
-      { q: "مؤثرات مؤثرين مصر موضة ملابس رجالي نسائي 2026 ستايل جديد", days: 21, domains: null },
-      { q: "Egypt fashion week designers local brand new style summer 2026", days: 30, domains: null },
-    ]),
-    // ── SEARCH DEMAND LAYER — 15-20 sources across diverse garment types ─
-    collectSources([
-      { q: "men Egypt fashion buy 2026 polo shirt chino suit blazer jacket", days: 30, domains: null },
-      { q: "women Egypt fashion buy 2026 maxi midi dress co-ord set jumpsuit", days: 30, domains: null },
-      { q: "Egyptian street style what people wearing Cairo summer 2026", days: 21, domains: null },
-      { q: "Egypt clothing trending now new arrivals men women 2026 براندات", days: 21, domains: null },
-      { q: "Egyptian fashion market bestselling garments colours fabrics 2026", days: 30, domains: null },
-      { q: "Egypt North Coast Sahel summer fashion outfit men women 2026", days: 14, domains: null },
-    ]),
-    // ── DYNAMIC SIGNALS — live relatedSearches from Google via Serper ────
-    getSerperDynamicSearchSignals(),
-    getShopifyProductImages(40),
-  ]);
+  const seasonMode = currentSeasonEgypt(); // "summer" in June
+  const seeds = buildSeeds();
 
-  // Refine each layer independently — keep signal identity clean
+  // ── Fire everything in parallel ──────────────────────────────────────
+  const [autocompleteRaw, dynamicSignals, influenceSources, demandSources, products] =
+    await Promise.all([
+      // Real consumer search demand — autocomplete for every seed (men + women)
+      Promise.all(
+        seeds.flatMap((s) =>
+          seedQueries(s).map(async (q) => {
+            const { suggestions, source } = await fetchSuggestions(q);
+            return suggestions.map((sug) => ({
+              rawQuery: sug, source, gender: s.gender, seedGarment: s.garment,
+            }));
+          })
+        )
+      ).then((r) => r.flat()),
+      // Live related-searches from Serper (men / women / general)
+      getSerperDynamicSearchSignals(),
+      // Layer 1 — influence sources (for the Sources panel + article support)
+      collectSources([
+        { q: "Egyptian fashion influencers men women 2026 trending outfits مؤثرين موضة مصر", days: 21, domains: null },
+        { q: "Egypt TikTok Instagram fashion creators style new collection 2026", days: 14, domains: null },
+        { q: "مؤثرات مؤثرين مصر موضة ملابس رجالي نسائي 2026 ستايل جديد", days: 21, domains: null },
+      ]),
+      // Layer 2 — search-demand articles (context + article support)
+      collectSources([
+        { q: "men Egypt fashion buy 2026 polo shirt chino jeans suit blazer", days: 30, domains: null },
+        { q: "women Egypt fashion buy 2026 dress jeans skirt blouse co-ord set", days: 30, domains: null },
+        { q: "Egyptian street style what people wearing Cairo summer 2026 براندات", days: 21, domains: null },
+      ]),
+      getShopifyProductImages(60),
+    ]);
+
   const influenceFiltered = refineSources(influenceSources);
   const demandFiltered = refineSources(demandSources);
-
-  // Build labeled blocks for the AI prompt
-  const influenceText = influenceFiltered.length
-    ? influenceFiltered.map((s, i) => `[I${i + 1}] ${s.title}: ${s.summary}`).join("\n")
-    : "No influencer signals found — rely on search demand layer.";
-
-  const demandText = demandFiltered.length
-    ? demandFiltered.map((s, i) => `[S${i + 1}] ${s.title}: ${s.summary}`).join("\n")
-    : "No search demand signals found — rely on influence layer.";
-
-  // Dynamic signals from Serper relatedSearches — real-time customer intent
-  const dynMen = dynamicSignals.menSignals.slice(0, 15).join(" | ");
-  const dynWomen = dynamicSignals.womenSignals.slice(0, 15).join(" | ");
-  const dynGeneral = dynamicSignals.generalSignals.slice(0, 10).join(" | ");
-  const dynamicText = [
-    dynMen ? `Men searching: ${dynMen}` : "",
-    dynWomen ? `Women searching: ${dynWomen}` : "",
-    dynGeneral ? `General: ${dynGeneral}` : "",
-  ].filter(Boolean).join("\n") || "No dynamic signals available.";
-
-  const productList = products.length ? products.map((p) => `${p.title} (${p.type})`).join("; ") : "(none)";
   const allSources = [...influenceFiltered, ...demandFiltered];
 
-  // Pre-assign fabric slots so the AI cannot repeat linen/beige across all trends.
-  // 6 fabric slots — linen is only allowed ONCE (slot 6), and only if signals actually support it.
-  const FABRIC_SLOTS = [
-    "SLOT A (Trend 1): PRIMARY fabric = COTTON or DENIM — no linen, no beige as primary colour",
-    "SLOT B (Trend 2): PRIMARY fabric = VISCOSE, CHIFFON, or SILK — no linen, no beige",
-    "SLOT C (Trend 3): PRIMARY fabric = DENIM, JERSEY, or POPLIN — no linen",
-    "SLOT D (Trend 4): PRIMARY fabric = BAMBOO, MODAL, or TENCEL — no linen",
-    "SLOT E (Trend 5): PRIMARY fabric = PIQUÉ, STRETCH-POPLIN, or COTTON-LINEN BLEND — no wool, no tweed (Egypt is hot)",
-    "SLOT F (Trend 6): PRIMARY fabric = LINEN is ALLOWED here ONLY if search data supports it — otherwise use COTTON or POPLIN",
-  ].join("\n");
+  // Which garments do Layer 1/2 articles actually mention? (article support score)
+  const articleGarments = new Set<string>();
+  for (const s of allSources) {
+    const hit = detectGarment(`${s.title} ${s.summary || ""}`);
+    if (hit) articleGarments.add(hit.def.type);
+  }
 
-  const prompt = `You are a strict Egypt fashion-trend RADAR for DEBACKERS (premium men+women). Evidence-based only. Never invent.
+  // ── CLASSIFY everything (deterministic) ───────────────────────────────
+  // ONLY real consumer signals count — autocomplete tails + live Serper
+  // related-searches. Our own seed queries are the PROBE, never a signal.
+  const classified: ClassifiedQuery[] = [];
 
-You have THREE signal sources. Use ALL THREE and label each trend's primary driver.
+  // 1) autocomplete tails (inherit gender + seed garment as fallback)
+  for (const t of autocompleteRaw) {
+    classified.push(classifySearchQuery(t.rawQuery, t.source, { gender: t.gender, seedGarment: t.seedGarment }));
+  }
+  // 2) Serper live related-searches
+  for (const q of dynamicSignals.menSignals) classified.push(classifySearchQuery(q, "serper", { gender: "men" }));
+  for (const q of dynamicSignals.womenSignals) classified.push(classifySearchQuery(q, "serper", { gender: "women" }));
+  for (const q of dynamicSignals.generalSignals) classified.push(classifySearchQuery(q, "serper"));
 
-LAYER 1 — INFLUENCE [I prefix]: Egyptian influencers, creators, editorial — what they're actively promoting. Drives future demand.
-LAYER 2 — SEARCH DEMAND [S prefix]: What Egyptians type into Google right now — web articles + brand pages. Current buying intent.
-LAYER 3 — LIVE CUSTOMER SEARCHES: Real-time related searches from Google — exactly what men and women are typing this week.
+  // ── Rejected log (deduped) ────────────────────────────────────────────
+  const rejected: RejectedRow[] = [];
+  const seenReject = new Set<string>();
+  for (const c of classified) {
+    if (!c.rejectReason || c.source === "seed") continue;
+    const key = c.normalizedQuery;
+    if (!key || seenReject.has(key)) continue;
+    seenReject.add(key);
+    rejected.push({ query: c.rawQuery, reason: c.rejectReason, source: c.source });
+  }
 
-FOCUS ONLY ON WEARABLE FASHION: specific GARMENTS + COLOURS + FABRICS + SILHOUETTES for men and women.
-IGNORE: celebrities, red carpets, heritage, history, museums, culture essays — pure noise.
+  // ── CLUSTER + SCORE + SEASON GUARD ────────────────────────────────────
+  const allClusters = buildDemandClusters(classified);
+  const { active, backlog: backlogClusters } = applySeasonGuard(allClusters, seasonMode);
 
-=== LAYER 1 — INFLUENCE SIGNALS ===
-${influenceText}
-=== END LAYER 1 ===
+  const ctx = { products: products as ShopProduct[], articleGarments };
+  for (const c of active) scoreCluster(c, ctx);
 
-=== LAYER 2 — SEARCH DEMAND SIGNALS ===
-${demandText}
-=== END LAYER 2 ===
+  // Qualifying clusters drive the demand map + trends (≥3 unique signals).
+  const qualifying = active
+    .filter((c) => c.uniqueSignals >= MIN_SIGNALS)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
-=== LAYER 3 — LIVE CUSTOMER SEARCHES (what Egyptians type RIGHT NOW) ===
-${dynamicText}
-=== END LAYER 3 ===
-
-=== DEBACKERS REAL PRODUCTS (match ONLY from this exact list) ===
-${productList}
-=== END ===
-
-━━━ EGYPT CLIMATE + GEO RULES — NON-NEGOTIABLE ━━━
-Egypt is SUMMER RIGHT NOW (June 2026, 35–42°C in Cairo). This means:
-- NEVER include: leather, wool, tweed, cashmere, fur, heavy coats, puffer jackets, winter boots.
-- ONLY hot-weather fabrics: linen, cotton, bamboo, modal, viscose, chiffon, silk, piqué, poplin, jersey.
-- EGYPT ONLY: All trends must be verified in the Egyptian/Arab market. Discard UK, European, US, or global signals that have NO evidence of Egyptian search demand. London Fashion Week, Paris runways, Milan catwalks = irrelevant unless Egyptians are actively searching for it. If a source is from a UK/EU/US publication and has no Egypt angle, ignore it.
-
-━━━ MANDATORY FABRIC ASSIGNMENTS — FOLLOW EXACTLY ━━━
-You MUST produce exactly 6 trends. Each trend is assigned a fabric slot below.
-This is NOT a suggestion — it is a hard requirement:
-${FABRIC_SLOTS}
-
-━━━ STRICT DIVERSITY RULES (ENFORCE — no exceptions) ━━━
-1. Each trend MUST be a DIFFERENT garment type. No garment type can repeat across trends.
-   Valid garment types: shirt, trouser/chino, dress, blazer/jacket, polo, co-ord set, jumpsuit, suit, coat, skirt, abaya, shorts.
-2. BALANCE: ≥2 men's trends, ≥2 women's trends across the 6.
-3. The word "beige" can appear as a SECONDARY colour detail but CANNOT be the first word in any trend name.
-4. TREND NAME FORMAT: Start with the GARMENT TYPE, then add one differentiating detail.
-   GOOD: "Wide-Leg Cotton Chino — Olive & Stone" | "Wrap Viscose Midi Dress — Deep Olive"
-   BAD: "Beige Chino" | "Linen Blend Shirt" | "Summer Style"
-5. If Layer 3 shows Egyptians searching for polo shirts, chinos, blazers, jumpsuits — those ARE trends even if Layer 1/2 don't mention them. Trust Layer 3.
-
-━━━ OUTPUT RULES ━━━
-- "signalLayer": MUST be set — "influence" / "search-demand" / "both". Never omit this field.
-- "sourceIndex": e.g. "I2" (influence), "S3" (demand web), "L3" (live search). Use "both" if multiple layers confirm.
-- BE SPECIFIC: "women's floral wrap midi dress" not "summer fashion".
-- evidenceStrength: "strong" = 2+ layers confirm; "medium" = 1 layer solid; "weak" = single weak signal.
-- "productMatches": 1-4 EXACT product titles from the list above, or []. STRICT: garment type must match exactly — polo trend → only polo products, shirt trend → only shirt products, dress → dress only. NEVER match a shirt to a polo trend or a polo to a shirt trend.
-- recommendedAction: "campaign push" | "small stock test" | "content only" | "avoid".
-
-Return ONLY a JSON array of 6 trends (exactly 6):
-[{
-  "id":"kebab-case","name":"Specific Trend Name","arabicName":"اسم بالعربي","gender":"men|women|unisex",
-  "signalLayer":"influence|search-demand|both",
-  "platform":"tiktok|instagram|google|multi","category":"aesthetic|color|style|product|occasion",
-  "trendScore":78,"growthRate":25,"relevanceScore":80,"confidenceScore":70,"expectedPeakDays":14,"survivalRate":60,
-  "searchSeed":"2-4 word English search keyword, e.g. wide leg chino men",
-  "evidenceStrength":"strong|medium|weak",
-  "signalsVerified":["specific verified signal from a layer"],
-  "signalsMissing":["buying-intent comments not accessible","no Google Trends volume"],
-  "recommendedAction":"campaign push|small stock test|content only|avoid",
-  "sourceIndex":"I1|S2|L3|both",
-  "signals":[{"source":"influence|search-demand|live-search","metric":"","value":"","weight":80,"direction":"up"}],
-  "competitorReaction":{"tieHouse":"","britishHouse":"","massimoDutti":"","gap":""},
-  "productMatches":["exact product title"],
-  "catalogMatch":{"readiness":"ready|partial|needs-sourcing","urgency":"act-now|prepare|monitor"},
-  "contentPrescription":{"format":["reel"],"hook":"Egyptian Arabic hook","hashtags":["#tag"],"sounds":["..."],"bestTime":"8-11pm"},
-  "description":"Gender + specific garment + colour + fabric — which layer confirmed it"
-}]
-Return ONLY the JSON array. Exactly 6 items. Fabric slots A-F assigned above. All different garment types.`;
-
-  const text = await callClaude(buildSystemPrompt(), prompt, 5000);
-  const raw = parseJson<any[]>(text);
-  const byTitle = new Map(products.map((p) => [p.title.toLowerCase().trim(), p]));
-
-  // Post-processing: enforce name format (garment-first) and fabric diversity.
-  // If the AI still starts a name with a color (Beige X, Linen X), restructure it.
-  const COLOR_FIRST = /^(beige|linen|white|black|navy|olive|stone|sand|cream|khaki|grey|gray)\s+/i;
-  const fabricCount: Record<string, number> = {};
-  const normalizeNames = (arr: any[]) => arr.map((t) => {
-    if (COLOR_FIRST.test(t.name || "")) {
-      const parts = (t.name as string).split(/\s+/);
-      // Move color to end: "Beige Linen Chino" → "Linen Chino — Beige"
-      const color = parts[0];
-      const rest = parts.slice(1).join(" ");
-      t.name = `${rest} — ${color}`;
+  // Under-evidenced clusters → rejected log (don't silently drop).
+  for (const c of active) {
+    if (c.uniqueSignals < MIN_SIGNALS && c.uniqueSignals > 0) {
+      rejected.push({
+        query: `${c.gender} ${c.garmentType} (${c.uniqueSignals} signal${c.uniqueSignals === 1 ? "" : "s"})`,
+        reason: `fewer than ${MIN_SIGNALS} unique search signals — needs review`,
+        source: "cluster",
+      });
     }
-    return t;
-  });
-  normalizeNames(raw);
+  }
 
-  const trends = raw.map((t, i) => {
-    const trend = normalizeTrend(t, i);
-    // Source attribution: "I2" → influenceFiltered[1], "S3" → demandFiltered[2]
-    const ref = String(t.sourceIndex || "");
-    const layerMatch = ref.match(/^([IS])(\d+)$/i);
-    if (layerMatch) {
-      const pool = layerMatch[1].toUpperCase() === "I" ? influenceFiltered : demandFiltered;
-      const idx = Number(layerMatch[2]) - 1;
-      if (idx >= 0 && idx < pool.length) {
-        trend.evidenceTitle = pool[idx].title;
-        trend.evidenceUrl = pool[idx].url;
-      }
-    }
-    // Attach REAL products (only ones that actually exist in the catalog).
-    const matches = (Array.isArray(t.productMatches) ? t.productMatches : [])
-      .map((name: string) => byTitle.get(String(name).toLowerCase().trim()))
-      .filter(Boolean)
-      .slice(0, 4)
-      .map((p: any) => ({ title: p.title, image: p.image, url: p.url, price: p.price }));
-    trend.matchedProducts = matches;
-    trend.searchSeed = (t.searchSeed || trend.name || "").toString().slice(0, 40);
-    // signalLayer: always set — never let it be empty
-    trend.signalLayer = (["influence", "search-demand", "both"] as const).includes(t.signalLayer)
-      ? t.signalLayer as "influence" | "search-demand" | "both"
-      : t.sourceIndex?.startsWith?.("I") ? "influence"
-      : t.sourceIndex?.startsWith?.("S") ? "search-demand"
-      : "both";
-    return trend;
-  });
+  // ── Search Demand Map rows ────────────────────────────────────────────
+  const demandMap: DemandMapRow[] = qualifying.slice(0, DEMAND_MAP_CAP).map((c, i) => ({
+    rank: i + 1,
+    gender: c.gender,
+    catalogCategory: c.catalogPath || (c.opportunity ? "— (opportunity, not in catalog)" : "—"),
+    garmentType: c.garmentType,
+    garmentLabel: label(c.garmentType),
+    searchSignalCount: c.uniqueSignals,
+    topFabrics: c.topFabric ? [c.topFabric] : [],
+    topModifiers: c.topModifiers,
+    topColors: c.topColors,
+    topIntent: c.topIntent,
+    inCatalog: !!c.inCatalog,
+    opportunity: !!c.opportunity,
+    score: c.score ?? 0,
+    confidence: c.confidence ?? "weak",
+    exampleQueries: c.exampleQueries.slice(0, 5),
+    scoreBreakdown: c.scoreBreakdown ?? {},
+  }));
 
-  // 🔍 SEARCHED ABOUT — real consumer demand, split MEN vs WOMEN, top ~18 each
-  // (free autocomplete, parallel). These reveal the colours/fabrics/types people type.
-  await Promise.all(
-    trends.map(async (trend) => {
-      const seed = trend.searchSeed || trend.name || "";
-      if (!seed) {
-        trend.searchDemandMen = [];
-        trend.searchDemandWomen = [];
-        return;
-      }
-      const { men, women } = await getGenderedDemand(seed, 18);
-      trend.searchDemandMen = men;
-      trend.searchDemandWomen = women;
-      // keep the flat list too (back-compat / quick glance)
-      trend.searchDemand = [...men.slice(0, 3), ...women.slice(0, 3)];
-    })
-  );
+  // ── Winter Backlog rows ───────────────────────────────────────────────
+  const backlog: BacklogRow[] = backlogClusters.map(({ cluster, reason }) => ({
+    garmentType: cluster.garmentType,
+    garmentLabel: label(cluster.garmentType),
+    gender: cluster.gender,
+    reason,
+    signalCount: cluster.uniqueSignals,
+  }));
 
-  return { trends, sources: allSources };
+  // ── AI COPY for the top clusters (Groq EXPLAINS, never decides) ────────
+  const topClusters = qualifying.slice(0, TOP_TRENDS);
+  const aiCopy = await enrichClustersWithCopy(topClusters, seasonMode);
+
+  const trends: RichTrend[] = topClusters.map((c) => buildTrendFromCluster(c, aiCopy[c.clusterKey], articleGarments));
+
+  return { trends, sources: allSources, demandMap, rejected: rejected.slice(0, 60), backlog };
 }
 
-// Fill any fields the model omitted so the UI never crashes on undefined.
-function normalizeTrend(t: any, i: number): RichTrend {
+// Ask Groq to write business copy for already-classified clusters.
+// Hard rule: it may NOT change garment type / gender / products.
+async function enrichClustersWithCopy(
+  clusters: DemandCluster[],
+  seasonMode: string
+): Promise<Record<string, any>> {
+  if (!clusters.length) return {};
+
+  const payload = clusters.map((c) => ({
+    key: c.clusterKey,
+    name: buildTrendName(c),
+    gender: c.gender,
+    garmentType: c.garmentType,
+    fabric: c.topFabric,
+    modifiers: c.topModifiers,
+    colors: c.topColors,
+    signalCount: c.uniqueSignals,
+    inCatalog: c.inCatalog,
+    examples: c.exampleQueries.slice(0, 4),
+  }));
+
+  const prompt = `You are a demand analyst + copywriter for DEBACKERS Egypt (premium men + women fashion). Season: ${seasonMode}, Cairo June 2026, 35–42°C.
+
+Below are PRE-CLASSIFIED demand clusters. Our system already determined each cluster's garment type, gender, fabric and product matches from REAL Egyptian search data. These are FIXED.
+
+YOUR ONLY JOB: write business copy for each cluster.
+
+ABSOLUTE RULES — breaking any of these makes the output invalid:
+- NEVER change the garmentType or gender.
+- NEVER invent product names or merge clusters.
+- NEVER turn a fabric into a garment (jeans stays jeans, not "denim jacket").
+- If inCatalog is false, frame it as an OPPORTUNITY / sourcing play, not an in-stock push.
+- Keep everything Egypt + ${seasonMode} relevant (no wool/winter items in summer).
+
+CLUSTERS (JSON):
+${JSON.stringify(payload, null, 1)}
+
+Return ONLY a JSON object keyed by the EXACT cluster "key" string. For each key:
+{
+  "arabicName": "Egyptian Arabic name for this garment trend",
+  "description": "1 sentence: gender + garment + fabric/colour + why it matters now",
+  "recommendation": "one clear action for Debackers",
+  "competitorReaction": { "tieHouse": "", "britishHouse": "", "massimoDutti": "", "gap": "the opening for Debackers" },
+  "contentPrescription": { "hook": "Egyptian Arabic hook", "format": ["reel"], "hashtags": ["#tag"], "bestTime": "8-11pm" }
+}
+Return ONLY the JSON object. One entry per cluster key above.`;
+
+  try {
+    const text = await callClaude(buildSystemPrompt(), prompt, 3500);
+    return parseJson<Record<string, any>>(text);
+  } catch {
+    return {};
+  }
+}
+
+// Build a RichTrend from a scored cluster. Everything structural is
+// deterministic; only the copy comes from the (optional) AI map.
+function buildTrendFromCluster(
+  c: DemandCluster,
+  copy: any,
+  articleGarments: Set<string>
+): RichTrend {
+  const inCatalog = !!c.inCatalog;
+  const score = c.score ?? 0;
+  const urgency: "act-now" | "prepare" | "monitor" =
+    inCatalog && score >= 70 ? "act-now" : score >= 50 ? "prepare" : "monitor";
+  const readiness: "ready" | "partial" | "needs-sourcing" =
+    inCatalog ? "ready" : c.catalogPath ? "partial" : "needs-sourcing";
+  const recommendedAction =
+    inCatalog && score >= 70 ? "campaign push" :
+    c.opportunity && score >= 60 ? "small stock test" :
+    score >= 45 ? "content only" : "monitor";
+
+  const signalLayer: "influence" | "search-demand" | "both" =
+    articleGarments.has(c.garmentType) ? "both" : "search-demand";
+
+  const genderSignals = c.exampleQueries.concat(c.signals).filter((v, i, a) => a.indexOf(v) === i);
+  const menList = c.gender === "men" ? c.signals.slice(0, 18) : [];
+  const womenList = c.gender === "women" ? c.signals.slice(0, 18) : [];
+
   return {
-    id: t.id || `trend-${i}`,
-    name: t.name || "Untitled trend",
-    arabicName: t.arabicName || "",
-    platform: t.platform || "multi",
-    category: t.category || "style",
-    trendScore: Number(t.trendScore) || 0,
-    growthRate: Number(t.growthRate) || 0,
-    relevanceScore: Number(t.relevanceScore) || 0,
-    confidenceScore: Number(t.confidenceScore) || 0,
-    expectedPeakDays: Number(t.expectedPeakDays) || 0,
-    survivalRate: Number(t.survivalRate) || 0,
-    signals: Array.isArray(t.signals) ? t.signals : [],
-    historicalMatch: t.historicalMatch || "",
-    lastYearOutcome: t.lastYearOutcome || "",
+    id: c.clusterKey.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
+    name: buildTrendName(c),
+    arabicName: copy?.arabicName || "",
+    platform: "google",
+    category: "product",
+    trendScore: score,
+    growthRate: 0, // honest: autocomplete gives demand DIRECTION, not a growth %
+    relevanceScore: c.scoreBreakdown?.catalogMatch ?? (inCatalog ? 100 : c.catalogPath ? 50 : 0),
+    confidenceScore: c.confidence === "strong" ? 85 : c.confidence === "medium" ? 60 : 35,
+    expectedPeakDays: 0,
+    survivalRate: 0,
+    signals: [
+      { source: "search-demand", metric: "unique search signals", value: String(c.uniqueSignals), weight: score, direction: "up" },
+      { source: "search-demand", metric: "buying-intent share", value: `${c.totalSignals ? Math.round((c.buyingSignals / c.totalSignals) * 100) : 0}%`, weight: c.scoreBreakdown?.buyingIntent ?? 0, direction: "up" },
+    ],
     competitorReaction: {
-      tieHouse: t.competitorReaction?.tieHouse || "—",
-      britishHouse: t.competitorReaction?.britishHouse || "—",
-      massimoDutti: t.competitorReaction?.massimoDutti || "—",
-      gap: t.competitorReaction?.gap || "—",
+      tieHouse: copy?.competitorReaction?.tieHouse || "—",
+      britishHouse: copy?.competitorReaction?.britishHouse || "—",
+      massimoDutti: copy?.competitorReaction?.massimoDutti || "—",
+      gap: copy?.competitorReaction?.gap || "—",
     },
     catalogMatch: {
-      products: t.catalogMatch?.products ?? [],
-      readiness: t.catalogMatch?.readiness || "partial",
-      urgency: t.catalogMatch?.urgency || "monitor",
+      products: (c.matchedProducts || []).map((p) => p.title),
+      readiness,
+      urgency,
     },
     contentPrescription: {
-      format: t.contentPrescription?.format ?? [],
-      hook: t.contentPrescription?.hook || "",
-      hashtags: t.contentPrescription?.hashtags ?? [],
-      sounds: t.contentPrescription?.sounds,
-      bestTime: t.contentPrescription?.bestTime || "8–11pm",
+      format: Array.isArray(copy?.contentPrescription?.format) ? copy.contentPrescription.format : ["reel"],
+      hook: copy?.contentPrescription?.hook || "",
+      hashtags: Array.isArray(copy?.contentPrescription?.hashtags) ? copy.contentPrescription.hashtags : [],
+      bestTime: copy?.contentPrescription?.bestTime || "8–11pm",
     },
-    description: t.description || "",
-    gender: t.gender === "men" || t.gender === "women" ? t.gender : "unisex",
-    signalLayer: (["influence", "search-demand", "both"] as const).includes(t.signalLayer) ? t.signalLayer : "both",
-    evidenceStrength: ["strong", "medium", "weak"].includes(t.evidenceStrength) ? t.evidenceStrength : "weak",
-    signalsVerified: Array.isArray(t.signalsVerified) ? t.signalsVerified : [],
-    signalsMissing: Array.isArray(t.signalsMissing) ? t.signalsMissing : ["buying-intent comments not accessible", "no Google Trends volume available"],
-    recommendedAction: t.recommendedAction || "content only",
+    description: copy?.description || `${c.gender} ${label(c.garmentType)}${c.topFabric ? " in " + c.topFabric : ""} — ${c.uniqueSignals} real Egyptian searches.`,
+    gender: c.gender === "men" || c.gender === "women" ? c.gender : "unisex",
+    evidenceStrength: c.confidence === "strong" ? "strong" : c.confidence === "medium" ? "medium" : "weak",
+    signalsVerified: c.exampleQueries.slice(0, 6),
+    signalsMissing: ["search VOLUME not available (autocomplete = demand direction, not counts)"],
+    recommendedAction,
+    signalLayer,
+    matchedProducts: c.matchedProducts || [],
+    searchSeed: c.garmentType,
+    searchDemandMen: menList,
+    searchDemandWomen: womenList,
+    searchDemand: genderSignals.slice(0, 6),
+    // deterministic cluster layer
+    garmentType: c.garmentType,
+    garmentFamily: c.garmentFamily,
+    catalogCategory: c.catalogPath || "",
+    topFabric: c.topFabric,
+    topModifiers: c.topModifiers,
+    searchSignalCount: c.uniqueSignals,
+    clusterScore: score,
+    scoreBreakdown: c.scoreBreakdown,
+    inCatalog,
+    opportunity: !!c.opportunity,
   };
 }
 
@@ -381,8 +450,6 @@ export interface LiveAlertsResult {
 }
 
 export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
-  // DISTINCT identity: alerts hunt what's SPIKING/NEW this week (not the broad
-  // current trends the Trend Engine covers). Its own sources, men + women.
   const sources = await collectSources([
     { q: "Egypt men's fashion rising trend this week 2026 رجالي", days: 7 },
     { q: "Egypt women's fashion viral new 2026 نسائي", days: 7 },
@@ -445,9 +512,9 @@ Return ONLY the JSON array.`;
 export interface InspirationItem {
   title: string;
   description: string;
-  colors: string[];        // hex codes
+  colors: string[];
   mood: string;
-  useFor: string;          // which Debackers products/campaigns
+  useFor: string;
 }
 export interface LiveInspirationResult {
   boards: InspirationItem[];
@@ -455,7 +522,6 @@ export interface LiveInspirationResult {
 }
 
 export async function generateLiveInspiration(): Promise<LiveInspirationResult> {
-  // DISTINCT identity: visual/colour direction for the UPCOMING season, men + women.
   const sources = await collectSources([
     { q: "fashion colour palette spring summer 2026 Egypt trend forecast linen cotton", days: 60 },
     { q: "Egypt menswear womenswear key colours silhouettes summer 2026 Cairo Sahel", days: 60 },

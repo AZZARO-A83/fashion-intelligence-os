@@ -6,10 +6,16 @@ export const maxDuration = 60;
 
 // GET — return the last generated live trends + sources (cached, no tokens).
 export async function GET() {
-  const cached = await getCachedReport<{ trends: unknown[]; sources: unknown[] }>(CACHE_KEYS.trends);
+  const cached = await getCachedReport<{
+    trends: unknown[]; sources: unknown[];
+    demandMap?: unknown[]; rejected?: unknown[]; backlog?: unknown[];
+  }>(CACHE_KEYS.trends);
   return NextResponse.json({
     trends: cached?.data?.trends ?? [],
     sources: cached?.data?.sources ?? [],
+    demandMap: cached?.data?.demandMap ?? [],
+    rejected: cached?.data?.rejected ?? [],
+    backlog: cached?.data?.backlog ?? [],
     generatedAt: cached?.generatedAt ?? null,
   });
 }
