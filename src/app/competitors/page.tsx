@@ -7,6 +7,7 @@ import { CompetitorIntelligence } from "@/lib/competitor-intelligence";
 import { COMPETITOR_BRANDS } from "@/lib/competitor-arabic";
 import { GenerationError } from "@/components/ui/generation-error";
 import { Sources, type Source } from "@/components/ui/sources";
+import { SearchCreditsPill } from "@/components/layout/search-credits-pill";
 import {
   ExternalLink, TrendingUp, Users,
   Eye, Instagram, Globe,
@@ -326,6 +327,8 @@ export default function CompetitorsPage() {
       setData(d);
       setSources(d.sources ?? []);
       setGeneratedAt(d.generatedAt);
+      // Research just spent search credits — update the pill immediately.
+      window.dispatchEvent(new Event("serper-usage-refresh"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -342,14 +345,17 @@ export default function CompetitorsPage() {
         subtitle="Live web research — what your competitors are doing right now"
         badge="🟢 Live"
         action={
-          <button
-            onClick={generate}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-accent text-black rounded-lg font-semibold text-sm hover:bg-accent/90 disabled:opacity-50 transition-all"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Researching live…" : competitors.length ? "Refresh research" : "Research competitors"}
-          </button>
+          <div className="flex items-center gap-3">
+            <SearchCreditsPill />
+            <button
+              onClick={generate}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-black rounded-lg font-semibold text-sm hover:bg-accent/90 disabled:opacity-50 transition-all"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              {loading ? "Researching live…" : competitors.length ? "Refresh research" : "Research competitors"}
+            </button>
+          </div>
         }
       />
 

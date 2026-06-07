@@ -92,7 +92,9 @@ export async function tavilySearch(
       published_date: it.date ? String(it.date) : undefined,
     }));
 
-    recordSerperUsage(1);
+    // Serper bills by result count, not per call: >10 results = 2 credits.
+    // The response body reports the exact cost — trust it; estimate as fallback.
+    recordSerperUsage(Number(data.credits) || (num > 10 ? 2 : 1));
     return { results, _raw: data };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
@@ -130,7 +132,7 @@ export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSign
         });
         if (!res.ok) return { related: [], paa: [] };
         const data = await res.json();
-        recordSerperUsage(1);
+        recordSerperUsage(Number(data.credits) || 1); // num=10 here → 1 credit
         const related: string[] = (data.relatedSearches || []).map((r: Record<string, string>) => r.query).filter(Boolean);
         const paa: string[] = (data.peopleAlsoAsk || []).map((r: Record<string, string>) => r.question).filter(Boolean);
         return { related, paa };
