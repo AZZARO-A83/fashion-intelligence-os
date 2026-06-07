@@ -47,7 +47,7 @@ export function DateRangePicker({ value, onChange }: Props) {
 
     // Shopify-style: "Last N days" starts N days before today (so today−7 .. today).
     if (preset === "today") onChange({ from: today, to: today });
-    else if (preset === "48h") onChange({ from: ymd(new Date(now.getTime() - 2 * 86400000)), to: today });
+    else if (preset === "48h") onChange({ from: ymd(new Date(now.getTime() - 1 * 86400000)), to: today });
     else if (preset === "7d") onChange({ from: ymd(new Date(now.getTime() - 7 * 86400000)), to: today });
     else if (preset === "30d") onChange({ from: ymd(new Date(now.getTime() - 30 * 86400000)), to: today });
     // "custom" waits for the date inputs + Apply button below

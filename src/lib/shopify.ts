@@ -163,9 +163,14 @@ function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
 
   const created = allOrders.filter((o) => inWin(o.created_at));
 
+  // Shopify counts only orders where payment was received for both order totals and AOV.
+  // Pending / voided / fully-refunded orders are excluded from analytics.
+  const PAID = new Set(["paid", "partially_refunded", "partially_paid"]);
+  const paidCreated = created.filter((o) => PAID.has(o.financial_status));
+
   let gross = 0;
   let discounts = 0;
-  let orderLevelRefunds = 0; // ALL refunds on in-window orders (for AOV, matches Shopify formula)
+  let orderLevelRefunds = 0;
   for (const o of created) {
     for (const it of o.line_items ?? []) gross += parseFloat(it.price) * it.quantity;
     discounts += parseFloat(o.total_discounts || 0);
@@ -174,6 +179,13 @@ function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
         (x: number, rli: any) => x + parseFloat(rli.subtotal || 0), 0);
     }
   }
+
+  // AOV = sum of subtotal_price (after discounts, before shipping/taxes) for PAID orders only
+  // ÷ count of paid orders. This matches Shopify's dashboard "Average order value" exactly.
+  const paidSubtotal = paidCreated.reduce(
+    (s: number, o: any) => s + parseFloat(o.subtotal_price || 0), 0
+  );
+  const paidOrderCount = paidCreated.length || 1;
 
   // Returns for net revenue: any refund PROCESSED inside this window, even for older orders.
   let returns = 0;
@@ -186,10 +198,9 @@ function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
     }
   }
 
-  // Shopify AOV = (gross - order-level refunds) / orders — matches Shopify admin exactly.
-  const aovNet = gross - orderLevelRefunds;
+  const aovNet = paidSubtotal; // after discounts, paid orders only
   const net = gross - discounts - returns;
-  return { gross, discounts, returns, net, aovNet, orderCount: created.length, created };
+  return { gross, discounts, returns, net, aovNet, aovOrderCount: paidOrderCount, orderCount: created.length, created };
 }
 
 // Process raw Shopify orders into analytics for the CURRENT window [fromMs, toMs].
@@ -209,8 +220,8 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const totalRevenue = Math.round(cur.net);          // 🟢 Shopify "Net sales"
   const totalOrders = cur.orderCount;
-  // Shopify AOV = (gross - order-level refunds) / orders — matches Shopify admin exactly.
-  const avgOrderValue = Math.round(cur.aovNet / totalOrders);
+  // Shopify AOV = subtotal_price (after discounts) / paid orders only — matches Shopify dashboard.
+  const avgOrderValue = Math.round(cur.aovNet / cur.aovOrderCount);
 
   // ─── Growth: current net vs equal prior period net ────────────────
   const pct = (now: number, prev: number) =>
@@ -218,8 +229,8 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const weeklyGrowthCalc = pct(cur.net, prior.net);
   const ordersGrowthCalc = pct(cur.orderCount, prior.orderCount);
-  const curAov = cur.orderCount ? cur.aovNet / cur.orderCount : 0;
-  const priAov = prior.orderCount ? prior.aovNet / prior.orderCount : 0;
+  const curAov = cur.aovOrderCount ? cur.aovNet / cur.aovOrderCount : 0;
+  const priAov = prior.aovOrderCount ? prior.aovNet / prior.aovOrderCount : 0;
   const aovGrowthCalc = pct(curAov, priAov);
 
   // ─── Repeat purchase rate — customers with 2+ orders (current window) ──
