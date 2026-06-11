@@ -4,6 +4,7 @@
 // NOTE: function names kept (tavilySearch/collectSources/…) so nothing else breaks.
 
 import { recordSerperUsage } from "@/lib/cache";
+import { searchFeedPool } from "@/lib/feeds";
 
 const SERPER_KEY = process.env.SERPER_API_KEY;
 const SERPER_URL = "https://google.serper.dev/search";
@@ -194,20 +195,26 @@ function cleanSnippet(content: string, title: string): string {
 export async function collectSources(
   queries: { q: string; days?: number; topic?: "general" | "news"; domains?: string[] | null }[]
 ): Promise<Source[]> {
-  const runs = await Promise.all(
-    queries.map(({ q, days, topic, domains }) =>
-      withTimeout(
-        tavilySearch(q, {
-          days: days ?? 30,
-          maxResults: 8,
-          topic: topic ?? "general",
-          includeDomains: domains ?? undefined,
-        }),
-        9000,
-        FALLBACK
+  // Two legs, in parallel: Serper (Google results) + publisher RSS feeds
+  // (free, unlimited, direct from the trusted magazines). RSS is append-only
+  // and fail-soft — it can only ADD sources, never break the Serper leg.
+  const [runs, feedSources] = await Promise.all([
+    Promise.all(
+      queries.map(({ q, days, topic, domains }) =>
+        withTimeout(
+          tavilySearch(q, {
+            days: days ?? 30,
+            maxResults: 8,
+            topic: topic ?? "general",
+            includeDomains: domains ?? undefined,
+          }),
+          9000,
+          FALLBACK
+        )
       )
-    )
-  );
+    ),
+    searchFeedPool(queries.map((x) => x.q), 10),
+  ]);
   const seen = new Set<string>();
   const sources: Source[] = [];
   const genericTitle = /^(instagram|tiktok|facebook|tik tok)\.?$/i;
@@ -220,6 +227,13 @@ export async function collectSources(
         seen.add(x.url);
         sources.push({ title, url: x.url, date: x.published_date, score: x.score, summary: snippet });
       }
+    }
+  }
+  // Publisher-direct articles (already dated, scored, max 3 per magazine).
+  for (const s of feedSources) {
+    if (s.url && !seen.has(s.url)) {
+      seen.add(s.url);
+      sources.push(s);
     }
   }
   return sources.sort((a, b) => {
