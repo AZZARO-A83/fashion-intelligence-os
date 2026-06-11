@@ -21,7 +21,7 @@ export async function GET() {
   }
 
   // Probes isolate each suspect: date filter, query width, Egypt bias, Arabic.
-  const probes = [
+  const probes: { label: string; params: Record<string, string> }[] = [
     { label: "plain (no date)", params: { q: "linen shirt" } },
     { label: "date d30", params: { q: "linen shirt", dateRestrict: "d30" } },
     { label: "egypt bias", params: { q: "linen shirt men", gl: "eg" } },
