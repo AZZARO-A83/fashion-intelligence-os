@@ -78,7 +78,7 @@ export default function SalesPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard label="Net Sales" value={`EGP ${data.totalRevenue.toLocaleString("en-EG")}`} change={data.weeklyGrowth} sub="Matches Shopify Net sales" accent />
           <StatCard label="Total Orders" value={data.totalOrders.toLocaleString()} sub="Selected range" />
-          <StatCard label="Avg Order Value" value={`EGP ${data.avgOrderValue.toLocaleString("en-EG")}`} sub="Gross ÷ orders (Shopify basis)" />
+          <StatCard label="Avg Order Value" value={`EGP ${data.avgOrderValue.toLocaleString("en-EG")}`} sub="Net sales ÷ non-cancelled orders (≈Shopify)" />
           <StatCard label="Repeat Buyers" value={`${data.repeatPurchaseRate}%`} sub="Customers with 2+ orders" />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

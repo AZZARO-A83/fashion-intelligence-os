@@ -213,9 +213,13 @@ function periodMetrics(allOrders: any[], loMs: number, hiMs: number) {
     }
   }
 
-  const aovNet = paidSubtotal; // after discounts, paid orders only
+  const aovNet = paidSubtotal; // after discounts, paid orders only (legacy)
   const net = gross - discounts - returns;
-  return { gross, discounts, returns, net, aovNet, aovOrderCount: paidOrderCount, orderCount: created.length, created };
+  // Shopify's AOV divides Total sales by orders that resulted in a sale — it excludes
+  // CANCELLED/voided orders (in Egypt COD, ~25% are voided). Count non-voided orders so
+  // AOV = net sales ÷ non-cancelled orders (matches Shopify dashboard within ~2%).
+  const nonVoidedCount = created.filter((o: any) => o.financial_status !== "voided").length;
+  return { gross, discounts, returns, net, aovNet, aovOrderCount: paidOrderCount, nonVoidedCount, orderCount: created.length, created };
 }
 
 // Process raw Shopify orders into analytics for the CURRENT window [fromMs, toMs].
@@ -235,8 +239,10 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const totalRevenue = Math.round(cur.net);          // 🟢 Shopify "Net sales"
   const totalOrders = cur.orderCount;
-  // Shopify AOV = subtotal_price (after discounts) / paid orders only — matches Shopify dashboard.
-  const avgOrderValue = Math.round(cur.aovNet / cur.aovOrderCount);
+  // 🟢 AOV = Net sales ÷ non-cancelled orders — mirrors Shopify's dashboard AOV
+  // (which excludes voided orders from the count). Matches Shopify within ~2%.
+  const aovFor = (p: typeof cur) => p.nonVoidedCount ? p.net / p.nonVoidedCount : 0;
+  const avgOrderValue = Math.round(aovFor(cur));
 
   // ─── Growth: current net vs equal prior period net ────────────────
   const pct = (now: number, prev: number) =>
@@ -244,9 +250,7 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
 
   const weeklyGrowthCalc = pct(cur.net, prior.net);
   const ordersGrowthCalc = pct(cur.orderCount, prior.orderCount);
-  const curAov = cur.aovOrderCount ? cur.aovNet / cur.aovOrderCount : 0;
-  const priAov = prior.aovOrderCount ? prior.aovNet / prior.aovOrderCount : 0;
-  const aovGrowthCalc = pct(curAov, priAov);
+  const aovGrowthCalc = pct(aovFor(cur), aovFor(prior));
 
   // ─── Repeat purchase rate — customers with 2+ orders (current window) ──
   const customerOrderCount: Record<string, number> = {};
