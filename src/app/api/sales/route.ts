@@ -42,5 +42,13 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ...salesData, insights });
+  // 🟢/🔴 Honest data-source flags for the UI. The Shopify lib reports `isLive`
+  // (boolean) + optional `dataError`; the Analytics page reads `dataSource`/`dataNote`.
+  // Map them here so live Shopify data is labeled LIVE — not mislabeled MOCK.
+  const dataSource = salesData.isLive ? "live" : "mock";
+  const dataNote = salesData.isLive
+    ? "🟢 LIVE — Real data from your Shopify store (last 30 days)."
+    : `🔴 MOCK / NO DATA — ${salesData.dataError ?? "Shopify not connected"}. Showing zeros, not invented numbers.`;
+
+  return NextResponse.json({ ...salesData, insights, dataSource, dataNote });
 }

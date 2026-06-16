@@ -26,7 +26,8 @@ export interface SalesData {
   repeatPurchaseRate: number;
   abandonedCarts: number;
   recoveryOpportunity?: number;
-  topProducts: TopProduct[];
+  topProducts: TopProduct[];     // top 10 by revenue
+  topByUnits?: TopProduct[];     // top 10 by units sold (surfaces cheaper high-volume items)
   lowProducts: TopProduct[];
   insights: SalesInsight[];
   revenueByDay: { date: string; revenue: number; orders: number }[];

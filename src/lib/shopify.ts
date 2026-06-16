@@ -3,6 +3,21 @@ import { SalesData, TopProduct } from "@/types";
 const SHOPIFY_URL = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 
+// Infer a coarse category from the product title so the UI can show variety
+// (and so suits don't look like the only thing that exists). Cheap keyword match.
+function inferCategory(title: string): string {
+  const t = title.toLowerCase();
+  if (/\bsuit\b|blazer|jacket/.test(t)) return "Suit";
+  if (/\bpolo\b/.test(t)) return "Polo";
+  if (/shirt|overshirt/.test(t)) return "Shirt";
+  if (/\btop\b|tank|tee|t-shirt/.test(t)) return "Top";
+  if (/short(s)?\b/.test(t)) return "Shorts";
+  if (/pant|trouser|jean|jogger/.test(t)) return "Pants";
+  if (/sock/.test(t)) return "Socks";
+  if (/dress|skirt/.test(t)) return "Dress";
+  return "Other";
+}
+
 function shopifyHeaders() {
   return {
     "X-Shopify-Access-Token": SHOPIFY_TOKEN!,
@@ -256,12 +271,18 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
     }
   }
   const sorted = Object.values(productMap).sort((a, b) => b.revenue - a.revenue);
-  const topProducts: TopProduct[] = sorted.slice(0, 5).map((p) => ({
-    name: p.name, revenue: Math.round(p.revenue), units: p.units, growth: 0, category: "shopify",
-  }));
-  const lowProducts: TopProduct[] = sorted.slice(-3).map((p) => ({
-    name: p.name, revenue: Math.round(p.revenue), units: p.units, growth: 0, category: "shopify",
-  }));
+  const toTP = (p: { revenue: number; units: number; name: string }): TopProduct => ({
+    name: p.name, revenue: Math.round(p.revenue), units: p.units, growth: 0, category: inferCategory(p.name),
+  });
+  // Top 10 by REVENUE — suits/jackets naturally lead (high ticket). Kept as the money view.
+  const topProducts: TopProduct[] = sorted.slice(0, 10).map(toTP);
+  // Top 10 by UNITS SOLD — surfaces cheaper, high-volume items (shirts, polos, socks)
+  // that revenue ranking hides. Same data, different lens.
+  const topByUnits: TopProduct[] = [...Object.values(productMap)]
+    .sort((a, b) => b.units - a.units)
+    .slice(0, 10)
+    .map(toTP);
+  const lowProducts: TopProduct[] = sorted.slice(-3).map(toTP);
 
   // ─── Revenue by day (current window) ──────────────────────────────
   const dayMap: Record<string, { revenue: number; orders: number }> = {};
@@ -281,6 +302,7 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
     totalOrders,
     avgOrderValue,
     topProducts,
+    topByUnits,
     lowProducts,
     revenueByDay,
     weeklyGrowthCalc,
@@ -341,7 +363,7 @@ function zeroSales(
     totalRevenue: 0, totalOrders: 0, avgOrderValue: 0, conversionRate: 0,
     weeklyGrowth: 0, ordersGrowth: 0, aovGrowth: 0, repeatPurchaseRate: 0,
     abandonedCarts, recoveryOpportunity: 0,
-    topProducts: [], lowProducts: [], insights: [], revenueByDay: [],
+    topProducts: [], topByUnits: [], lowProducts: [], insights: [], revenueByDay: [],
     isLive, dataError, ...meta,
   };
 }
@@ -417,6 +439,7 @@ export async function getSalesData(
       totalOrders: salesProcessed.totalOrders ?? 0,
       avgOrderValue: salesProcessed.avgOrderValue ?? 0,
       topProducts: salesProcessed.topProducts ?? [],
+      topByUnits: salesProcessed.topByUnits ?? [],
       lowProducts: salesProcessed.lowProducts ?? [],
       revenueByDay: salesProcessed.revenueByDay ?? [],
       abandonedCarts,

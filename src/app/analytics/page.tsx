@@ -177,29 +177,48 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             </div>
 
-            {/* Top Products — REAL from Shopify */}
-            <div className="bg-surface border border-border/50 rounded-xl p-5">
-              <SectionTitle
-                title="Top Products by Revenue"
-                sub="Best sellers from your Shopify store"
-                badge={isLive ? <LiveBadge /> : <MockBadge reason="Connect Shopify to see real products" />}
-              />
-              <div className="space-y-2">
-                {data.topProducts?.map((p, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
-                    <span className="text-xs font-bold text-accent w-5">{i + 1}.</span>
-                    <div className="flex-1">
-                      <p className="text-xs font-medium text-foreground">{p.name}</p>
-                      <p className="text-[10px] text-muted">{p.units} units sold</p>
+            {/* Top Products — REAL from Shopify — two lenses: by revenue + by units */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Top 10 by Revenue (suits lead — high ticket) */}
+              <div className="bg-surface border border-border/50 rounded-xl p-5">
+                <SectionTitle
+                  title="Top 10 by Revenue"
+                  sub="Money view — high-ticket items (suits) lead"
+                  badge={isLive ? <LiveBadge /> : <MockBadge reason="Connect Shopify to see real products" />}
+                />
+                <div className="space-y-2">
+                  {data.topProducts?.map((p, i) => (
+                    <div key={i} className="flex items-center gap-3 p-2.5 bg-surface-2 rounded-lg">
+                      <span className="text-xs font-bold text-accent w-5">{i + 1}.</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-[10px] text-muted">{p.units} units · <span className="text-foreground-muted">{p.category}</span></p>
+                      </div>
+                      <p className="text-sm font-bold text-foreground whitespace-nowrap">EGP {p.revenue.toLocaleString()}</p>
                     </div>
-                    <p className="text-sm font-bold text-foreground">EGP {p.revenue.toLocaleString()}</p>
-                    {p.growth !== 0 && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.growth > 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
-                        {p.growth > 0 ? "+" : ""}{p.growth}%
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+
+              {/* Top 10 by Units Sold (surfaces cheaper high-volume items) */}
+              <div className="bg-surface border border-border/50 rounded-xl p-5">
+                <SectionTitle
+                  title="Top 10 by Units Sold"
+                  sub="Volume view — what actually moves most, all price points"
+                  badge={isLive ? <LiveBadge /> : <MockBadge reason="Connect Shopify to see real products" />}
+                />
+                <div className="space-y-2">
+                  {(data.topByUnits ?? []).map((p, i) => (
+                    <div key={i} className="flex items-center gap-3 p-2.5 bg-surface-2 rounded-lg">
+                      <span className="text-xs font-bold text-accent w-5">{i + 1}.</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-[10px] text-muted">EGP {p.revenue.toLocaleString()} · <span className="text-foreground-muted">{p.category}</span></p>
+                      </div>
+                      <p className="text-sm font-bold text-foreground whitespace-nowrap">{p.units} units</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

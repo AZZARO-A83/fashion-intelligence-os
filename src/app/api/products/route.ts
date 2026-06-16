@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSalesData } from "@/lib/shopify";
 
 const SHOPIFY_URL = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -42,66 +43,69 @@ async function fetchProductDetails(limit: string, type: string): Promise<Shopify
     }));
 }
 
-async function fetchBestSellers(): Promise<ShopifyProduct[]> {
-  // ShopifyQL: top 20 products by gross sales in last 60 days
-  const gqlRes = await fetch(
-    `https://${SHOPIFY_URL}/admin/api/2025-01/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": SHOPIFY_TOKEN!,
-      },
-      body: JSON.stringify({
-        query: `query {
-          reportingQuery(query: "FROM sales SHOW gross_sales, orders GROUP BY product_title ORDER BY gross_sales DESC SINCE -60d UNTIL today LIMIT 20") {
-            data
-            rowCount
-            columnNames
-          }
-        }`,
-      }),
-    }
-  );
-
-  const gqlData = await gqlRes.json();
-  const report = gqlData?.data?.reportingQuery;
-  if (!report?.data) throw new Error("ShopifyQL returned no data");
-
-  const columns: string[] = report.columnNames;
-  const rows: unknown[][] = JSON.parse(report.data);
-
-  // Build a ranked title → sales map
-  const salesMap = new Map<string, { grossSales: number; ordersCount: number; rank: number }>();
-  rows.forEach((row, rank) => {
-    const obj: Record<string, unknown> = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    const title = String(obj["product_title"] ?? "").trim();
-    if (title) {
-      salesMap.set(title.toLowerCase(), {
-        grossSales: parseFloat(String(obj["gross_sales"] ?? "0")),
-        ordersCount: parseInt(String(obj["orders"] ?? "0"), 10),
-        rank,
+// Live best sellers — ranked by REAL sales (raw Shopify order line-items, last 30 days),
+// then enriched with product images/handle from the catalog so the UI can show them.
+//
+// NOTE: this used to call a GraphQL field `reportingQuery` that does NOT exist on the
+// Shopify Admin API ("Field 'reportingQuery' doesn't exist on type 'QueryRoot'"), so it
+// silently returned [] forever. Now it reuses getSalesData() — the same engine the
+// dashboard/analytics use — which is verified live.
+// Fetch the ENTIRE catalog across pages (Shopify caps each page at 250).
+// The store has >250 products, so a single page misses most best sellers —
+// that's why matching used to drop 9 of the top 10. Paginate via the Link header.
+async function fetchAllProducts(): Promise<ShopifyProduct[]> {
+  const all: ShopifyProduct[] = [];
+  let endpoint = `https://${SHOPIFY_URL}/admin/api/2025-01/products.json?limit=250&fields=id,title,handle,product_type,variants,images,tags,vendor`;
+  for (let page = 0; page < 20; page++) { // hard stop at 5000 products
+    const res = await fetch(endpoint, { headers: { "X-Shopify-Access-Token": SHOPIFY_TOKEN! } });
+    if (!res.ok) break;
+    const data = await res.json();
+    for (const p of data.products ?? []) {
+      if (!p.images?.length) continue;
+      all.push({
+        id: p.id, title: p.title, handle: p.handle, type: p.product_type ?? "",
+        price: p.variants?.[0]?.price ?? "0", image: p.images[0]?.src ?? "",
+        url: `https://${SHOPIFY_URL}/products/${p.handle}`,
+        images: p.images.slice(0, 4).map((img: any) => img.src),
+        tags: (p.tags ?? "").split(",").map((t: string) => t.trim()).filter(Boolean),
+        vendor: p.vendor ?? "",
       });
     }
-  });
+    const link = res.headers.get("Link") ?? "";
+    const next = link.match(/<([^>]+)>;\s*rel="next"/);
+    if (!next || (data.products ?? []).length < 250) break;
+    endpoint = next[1];
+  }
+  return all;
+}
 
-  // Fetch product details from REST (50 is enough to cover 20 best sellers)
-  const products = await fetchProductDetails("50", "");
+async function fetchBestSellers(): Promise<ShopifyProduct[]> {
+  const sales = await getSalesData(); // default = last 30 days, live from Shopify
+  if (!sales.isLive || !sales.topProducts.length) return [];
 
-  // Filter + enrich with sales data, sorted by rank
-  return products
-    .filter((p) => salesMap.has(p.title.toLowerCase()))
-    .map((p) => ({
-      ...p,
-      grossSales: salesMap.get(p.title.toLowerCase())!.grossSales,
-      ordersCount: salesMap.get(p.title.toLowerCase())!.ordersCount,
-    }))
-    .sort(
-      (a, b) =>
-        (salesMap.get(a.title.toLowerCase())!.rank) -
-        (salesMap.get(b.title.toLowerCase())!.rank)
-    );
+  // Pull the FULL catalog (paginated) to attach images/handle/type to each ranked seller.
+  const details = await fetchAllProducts();
+  const byTitle = new Map(details.map((p) => [p.title.toLowerCase().trim(), p]));
+
+  return sales.topProducts
+    .map((tp, rank): ShopifyProduct => {
+      const d = byTitle.get(tp.name.toLowerCase().trim());
+      return {
+        id: d?.id ?? rank,
+        title: tp.name,
+        handle: d?.handle ?? "",
+        type: d?.type || tp.category || "",
+        price: d?.price ?? "0",
+        image: d?.image ?? "",
+        url: d?.url ?? (d?.handle ? `https://${SHOPIFY_URL}/products/${d.handle}` : ""),
+        images: d?.images ?? [],
+        tags: d?.tags ?? [],
+        vendor: d?.vendor ?? "",
+        grossSales: tp.revenue,   // real EGP revenue from order line-items
+        ordersCount: tp.units,    // real units sold
+      };
+    })
+    .filter((p) => p.image); // grid needs a photo; drop any without one
 }
 
 export async function GET(request: Request) {
