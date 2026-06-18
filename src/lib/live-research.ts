@@ -513,19 +513,40 @@ export interface LiveAlertsResult {
 }
 
 export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
-  const sources = await collectSources([
+  const [sources, dynamicSignals] = await Promise.all([
+    collectSources([
+      { q: "Egypt men's summer fashion shirts trousers linen polo June 2026", days: 30 },
+      { q: "Egypt women's summer fashion dresses wide leg pants modest sets June 2026", days: 30 },
+      { q: "Cairo Egypt fashion retail new collection men women June 2026", days: 30, topic: "news" },
+      { q: "Egypt Sahel North Coast summer outfits men women 2026", days: 30 },
     { q: "Egypt men's fashion rising trend this week 2026 رجالي", days: 7 },
     { q: "Egypt women's fashion viral new 2026 نسائي", days: 7 },
     { q: "Egyptian fashion news what's new 2026", days: 10, topic: "news" },
+    ]),
+    getSerperDynamicSearchSignals(),
   ]);
   const searchText = sources.length
     ? sources.map((s) => `- ${s.title}: ${s.summary}`).join("\n")
     : "No fresh signals found this week.";
+  const googleDemandText = [
+    ...dynamicSignals.menSignals.slice(0, 8).map((q) => `MEN Google demand: ${q}`),
+    ...dynamicSignals.womenSignals.slice(0, 8).map((q) => `WOMEN Google demand: ${q}`),
+    ...dynamicSignals.generalSignals.slice(0, 5).map((q) => `GENERAL Google demand: ${q}`),
+  ].join("\n") || "No Google related-search demand signals found.";
 
   const prompt = `You are a trend-alert system for DEBACKERS Egypt (premium MEN + WOMEN fashion).
 From the LIVE signals below, surface the 4 FASTEST-RISING / NEWEST things that need action now.
 
-=== LIVE SIGNALS THIS WEEK (your only source) ===
+Current date: June 2026.
+Freshness rule: use only signals from the last 30 days or Google demand signals collected today.
+Priority rule: Google demand/search intent is the strongest signal because it shows what customers are searching now.
+Reject anything not about clothing, fashion, outfits, fabrics, colours, silhouettes, men/women apparel, or DEBACKERS-relevant retail.
+
+=== GOOGLE DEMAND SIGNALS COLLECTED TODAY ===
+${googleDemandText}
+=== END GOOGLE DEMAND ===
+
+=== FRESH DATED SOURCES (last 30 days only) ===
 ${searchText}
 === END ===
 
@@ -546,7 +567,13 @@ Return ONLY the JSON array.`;
   const text = await callClaude(buildSystemPrompt(), prompt, 3500);
   const raw = parseJson<any[]>(text);
   const now = new Date().toISOString();
-  const alerts: TrendAlert[] = raw.map((a, i) => ({
+  const fashionAlert = /\b(fashion|style|outfit|wear|clothing|dress|shirt|polo|tee|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|wide.?leg|summer|beachwear)\b/i;
+  const rejectAlert = /\b(politics|war|refugee|deportation|travel alert|tourism|monorail|museum|ancient|pharaoh|archaeology|football|weather|transport)\b/i;
+  const cleanAlerts = raw.filter((a) => {
+    const text = `${a?.trendName || ""} ${a?.relevanceToDebackers || ""} ${(a?.signals || []).join(" ")}`;
+    return fashionAlert.test(text) && !rejectAlert.test(text);
+  });
+  const alerts: TrendAlert[] = cleanAlerts.slice(0, 4).map((a, i) => ({
     id: `alert-${i}`,
     detectedAt: now,
     trendName: a.trendName || "Trend",

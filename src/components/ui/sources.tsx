@@ -10,6 +10,13 @@ export interface Source {
   summary?: string;
 }
 
+function formatSourceDate(date?: string): string {
+  if (!date) return "";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" });
+}
+
 // Shows the REAL web sources behind a live research result so the user can
 // click and verify every claim. If there are no sources, it says so loudly —
 // never lets the app pretend something is "live" when it isn't.
@@ -41,6 +48,7 @@ export function Sources({ sources }: { sources: Source[] }) {
         {sources.map((s, i) => {
           let host = s.url;
           try { host = new URL(s.url).hostname.replace("www.", ""); } catch { /* keep raw */ }
+          const dateLabel = formatSourceDate(s.date);
           return (
             <a
               key={i}
@@ -53,7 +61,7 @@ export function Sources({ sources }: { sources: Source[] }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground group-hover:text-accent">{s.title || host}</p>
                 <p className="text-[11px] text-muted">
-                  {host}{s.date ? ` · ${new Date(s.date).toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" })}` : ""}
+                  {host}{dateLabel ? ` · ${dateLabel}` : ""}
                 </p>
                 {s.summary && (
                   <p className="text-xs text-foreground-muted leading-relaxed mt-1.5">{s.summary}</p>

@@ -8,6 +8,7 @@ import { searchFeedPool } from "@/lib/feeds";
 
 const SERPER_KEY = process.env.SERPER_API_KEY;
 const SERPER_URL = "https://google.serper.dev/search";
+const MAX_SOURCE_AGE_DAYS = 30;
 
 export const FASHION_SOURCE_DOMAINS = [
   "thebeesmagazine.com", "modash.io", "ellearabia.com",
@@ -37,6 +38,34 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 
 const FALLBACK = { results: [] as TavilyResult[], error: "timeout" };
 
+function serperDateWindow(days?: number): string {
+  const boundedDays = Math.min(Math.max(days ?? MAX_SOURCE_AGE_DAYS, 1), MAX_SOURCE_AGE_DAYS);
+  if (boundedDays <= 1) return "qdr:d";
+  if (boundedDays <= 7) return "qdr:w";
+  return "qdr:m";
+}
+
+function parseSourceDate(date?: string): Date | null {
+  if (!date) return null;
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isFreshSource(date?: string, maxDays = MAX_SOURCE_AGE_DAYS): boolean {
+  const parsed = parseSourceDate(date);
+  if (!parsed) return false;
+  const ageDays = (Date.now() - parsed.getTime()) / 86_400_000;
+  return ageDays >= -1 && ageDays <= maxDays;
+}
+
+function hasFashionIntent(text: string): boolean {
+  return /\b(fashion|style|outfit|wear|clothing|apparel|collection|new arrival|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|street style|summer|beachwear|sahel|north coast)\b/i.test(text);
+}
+
+function isRejectedContext(text: string): boolean {
+  return /\b(politics|war|refugee|deportation|travel alert|tourism|monorail|museum|ancient|pharaoh|archaeology|stock market|football|crime|court|weather|transport)\b/i.test(text);
+}
+
 export async function tavilySearch(
   query: string,
   options: {
@@ -58,7 +87,7 @@ export async function tavilySearch(
       gl: "eg",
       hl: "en",
       num,
-      tbs: "qdr:m4", // last 4 months — keeps results seasonal (summer now = summer content)
+      tbs: serperDateWindow(options.days),
     };
     if (options.topic === "news") body.type = "news";
 
@@ -129,7 +158,7 @@ export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSign
         const res = await fetch(SERPER_URL, {
           method: "POST",
           headers: { "X-API-KEY": SERPER_KEY!, "Content-Type": "application/json" },
-          body: JSON.stringify({ q, gl: "eg", hl: "en", num: 10, tbs: "qdr:m4" }),
+          body: JSON.stringify({ q, gl: "eg", hl: "en", num: 10, tbs: serperDateWindow(30) }),
         });
         if (!res.ok) return { related: [], paa: [] };
         const data = await res.json();
@@ -222,7 +251,15 @@ export async function collectSources(
     for (const x of r.results ?? []) {
       const title = (x.title || "").trim();
       const snippet = cleanSnippet(x.content || "", title);
-      const relevant = (x.score ?? 0) >= 0.4 && title.length > 3 && !genericTitle.test(title) && snippet.length > 40;
+      const text = `${title} ${snippet}`;
+      const relevant =
+        (x.score ?? 0) >= 0.4 &&
+        title.length > 3 &&
+        !genericTitle.test(title) &&
+        snippet.length > 40 &&
+        isFreshSource(x.published_date) &&
+        hasFashionIntent(text) &&
+        !isRejectedContext(text);
       if (x.url && !seen.has(x.url) && relevant) {
         seen.add(x.url);
         sources.push({ title, url: x.url, date: x.published_date, score: x.score, summary: snippet });
@@ -231,7 +268,14 @@ export async function collectSources(
   }
   // Publisher-direct articles (already dated, scored, max 3 per magazine).
   for (const s of feedSources) {
-    if (s.url && !seen.has(s.url)) {
+    const text = `${s.title} ${s.summary || ""}`;
+    if (
+      s.url &&
+      !seen.has(s.url) &&
+      isFreshSource(s.date) &&
+      hasFashionIntent(text) &&
+      !isRejectedContext(text)
+    ) {
       seen.add(s.url);
       sources.push(s);
     }

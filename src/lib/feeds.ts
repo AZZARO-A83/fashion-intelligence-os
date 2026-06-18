@@ -53,7 +53,7 @@ export interface FeedItem {
 
 const POOL_KEY = "live:rss-pool:v1";
 const POOL_TTL = 3 * 60 * 60; // 3h — feeds don't move faster than that
-const MAX_AGE_DAYS = 45;
+const MAX_AGE_DAYS = 30;
 
 // ── tiny XML helpers (no deps) ────────────────────────────────────────
 function decodeEntities(s: string): string {
@@ -137,7 +137,8 @@ const STOPWORDS = new Set([
 // (generic words excluded from scoring so matches mean something; gender and
 // Egypt relevance are carried by the queries' REAL terms: garments, fabrics, colours)
 
-const FASHION_HINT = /\b(colou?r|fabric|linen|cotton|denim|wool|silk|knit|trouser|pant|chino|shirt|tee|polo|blazer|jacket|coat|dress|skirt|abaya|kaftan|suit|silhouette|tailor|wide.?leg|oversized|capsule|collection|runway|menswear|womenswear|beige|stone|olive|navy|pastel|earth tone|palette)\b/i;
+const FASHION_HINT = /\b(colou?r|fabric|linen|cotton|denim|wool|silk|knit|trouser|pant|chino|shirt|tee|polo|blazer|jacket|coat|dress|skirt|abaya|kaftan|suit|silhouette|tailor|wide.?leg|oversized|capsule|collection|runway|menswear|womenswear|beige|stone|olive|navy|pastel|earth tone|palette|modest|beachwear|summer|sahel|north coast)\b/i;
+const REJECT_CONTEXT = /\b(politics|war|refugee|deportation|travel alert|tourism|monorail|museum|ancient|pharaoh|archaeology|stock market|football|crime|court|weather|transport)\b/i;
 
 export async function searchFeedPool(queries: string[], limit = 10): Promise<Source[]> {
   try {
@@ -154,6 +155,7 @@ export async function searchFeedPool(queries: string[], limit = 10): Promise<Sou
     const scored = pool
       .map((it) => {
         const text = `${it.title} ${it.summary}`.toLowerCase();
+        if (REJECT_CONTEXT.test(text)) return null;
         let hits = 0;
         for (const t of terms) if (text.includes(t)) hits++;
         const fashionable = FASHION_HINT.test(text);
