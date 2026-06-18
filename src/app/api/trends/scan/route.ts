@@ -7,6 +7,30 @@ import type { TrendAlert } from "@/lib/trend-alerts";
 export const maxDuration = 60;
 
 const ARABIC_TEXT = /[\u0600-\u06FF]/;
+const WEAK_ALERT = /\b(kate middleton|royal ascot|pixie cut|hair trend|world cup|sport|wags|sandals|hats|nordstrom|tourism|refugee|deportation|war|politics|travel alert|monorail|museum|egypt safe)\b/i;
+const FASHION_ALERT = /\b(dress|shirt|polo|t-shirt|tee|top|blouse|skirt|pants|trouser|chino|jeans|suit|blazer|vest|tie|belt|shoe|socks|linen|cotton|denim|modest|outfit|fashion|style|summer|beach|sahel|ملابس|لبس|موضة|ستايل|قميص|فستان|توب|بلوزة|بنطلون|بناطيل|بدلة|بليزر|تشينو|جينز|تنورة|جيبة|كرافت|كتان|قطن|صيف)\b/i;
+
+function isUsefulCachedAlert(alert: TrendAlert): boolean {
+  const text = `${alert.trendName} ${alert.arabicName || ""} ${alert.relevanceToDebackers} ${alert.suggestedAction} ${(alert.signals || []).join(" ")}`;
+  return FASHION_ALERT.test(text) && !WEAK_ALERT.test(text);
+}
+
+function mergeAlerts(trendAlerts: TrendAlert[], cachedAlerts: TrendAlert[]): TrendAlert[] {
+  const seen = new Set<string>();
+  const priorityRank: Record<string, number> = { urgent: 3, high: 2, medium: 1, watch: 0 };
+  return [...trendAlerts, ...cachedAlerts.filter(isUsefulCachedAlert)]
+    .filter((alert) => {
+      const key = `${alert.trendName}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) =>
+      (priorityRank[b.priority] ?? 0) - (priorityRank[a.priority] ?? 0) ||
+      b.currentScore - a.currentScore
+    )
+    .slice(0, 8);
+}
 
 function alertsFromTrends(trends: RichTrend[]): TrendAlert[] {
   const now = new Date().toISOString();
@@ -54,8 +78,8 @@ export async function GET() {
     getCachedReport<{ trends: RichTrend[]; sources: any[] }>(CACHE_KEYS.trends),
   ]);
   const cachedAlerts = cached?.data?.alerts ?? [];
-  const fallbackAlerts = cachedAlerts.length ? [] : alertsFromTrends(trendCache?.data?.trends ?? []);
-  const alerts = cachedAlerts.length ? cachedAlerts : fallbackAlerts;
+  const trendAlerts = alertsFromTrends(trendCache?.data?.trends ?? []);
+  const alerts = mergeAlerts(trendAlerts, cachedAlerts);
   return NextResponse.json({
     alerts,
     sources: cached?.data?.sources ?? trendCache?.data?.sources ?? [],
@@ -63,7 +87,7 @@ export async function GET() {
     newAlerts: alerts.filter((a) => a.status === "new").length,
     urgentAlerts: alerts.filter((a) => a.priority === "urgent").length,
     totalAlerts: alerts.length,
-    fallbackFromTrends: cachedAlerts.length === 0 && fallbackAlerts.length > 0,
+    fallbackFromTrends: trendAlerts.length > 0,
   });
 }
 
@@ -74,9 +98,7 @@ export async function POST() {
       generateLiveAlerts(),
       getCachedReport<{ trends: RichTrend[] }>(CACHE_KEYS.trends),
     ]);
-    if (!result.alerts.length) {
-      result.alerts = alertsFromTrends(trendCache?.data?.trends ?? []);
-    }
+    result.alerts = mergeAlerts(alertsFromTrends(trendCache?.data?.trends ?? []), result.alerts);
     await setCachedReport(CACHE_KEYS.alerts, result);
     return NextResponse.json({ ...result, generatedAt: new Date().toISOString(), success: true });
   } catch (err: any) {
