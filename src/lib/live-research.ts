@@ -519,9 +519,6 @@ export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
       { q: "Egypt women's summer fashion dresses wide leg pants modest sets June 2026", days: 30 },
       { q: "Cairo Egypt fashion retail new collection men women June 2026", days: 30, topic: "news" },
       { q: "Egypt Sahel North Coast summer outfits men women 2026", days: 30 },
-    { q: "Egypt men's fashion rising trend this week 2026 رجالي", days: 7 },
-    { q: "Egypt women's fashion viral new 2026 نسائي", days: 7 },
-    { q: "Egyptian fashion news what's new 2026", days: 10, topic: "news" },
     ]),
     getSerperDynamicSearchSignals(),
   ]);
