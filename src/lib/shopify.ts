@@ -7,7 +7,10 @@ const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 // (and so suits don't look like the only thing that exists). Cheap keyword match.
 function inferCategory(title: string): string {
   const t = title.toLowerCase();
-  if (/\bsuit\b|blazer|jacket/.test(t)) return "Suit";
+  if (/\btuxedo\b/.test(t)) return "Tuxedo";
+  if (/\bsuit\b/.test(t)) return "Suit";
+  if (/blazer/.test(t)) return "Blazer";
+  if (/jacket/.test(t)) return "Jacket";
   if (/\bpolo\b/.test(t)) return "Polo";
   if (/shirt|overshirt/.test(t)) return "Shirt";
   if (/\btop\b|tank|tee|t-shirt/.test(t)) return "Top";
@@ -16,6 +19,25 @@ function inferCategory(title: string): string {
   if (/sock/.test(t)) return "Socks";
   if (/dress|skirt/.test(t)) return "Dress";
   return "Other";
+}
+
+function productFamily(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\b(white|black|navy|blue|light|dark|grey|gray|charcoal|beige|off white|solid|bamboo|cotton|linen|blend|micro-textured|patterned|checked|ash|bale|yellow|green|brown|red|pink|latte)\b/g, " ")
+    .replace(/\b(open-stitch|knitted|knit|classic|casual)\b/g, (m) => m)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function displayFamilyName(title: string, variants: number): string {
+  const category = inferCategory(title);
+  const base = title
+    .replace(/\b(White|Black|Navy|Blue|Light|Dark|Grey|Gray|Charcoal|Beige|Off White|Solid|Ash|Bale|Yellow|Green|Brown|Red|Pink|Latte)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return variants > 1 ? `${base || category} (${variants} variants)` : title;
 }
 
 function shopifyHeaders() {
@@ -265,30 +287,90 @@ function processOrders(orders: any[], fromMs: number, toMs: number): Partial<Sal
     : 0;
 
   // ─── Product sales map (current window) ───────────────────────────
-  const productMap: Record<string, { revenue: number; units: number; name: string }> = {};
-  for (const order of cur.created) {
-    for (const item of order.line_items ?? []) {
-      const key = item.product_id?.toString() ?? item.title;
-      if (!productMap[key]) productMap[key] = { revenue: 0, units: 0, name: item.title };
-      productMap[key].revenue += parseFloat(item.price) * item.quantity;
-      productMap[key].units += item.quantity;
-    }
-  }
-  const sorted = Object.values(productMap).sort((a, b) => b.revenue - a.revenue);
-  const toTP = (p: { revenue: number; units: number; name: string }): TopProduct => ({
-    name: p.name, revenue: Math.round(p.revenue), units: p.units, growth: 0, category: inferCategory(p.name),
-  });
-  // Top 10 by REVENUE — suits/jackets naturally lead (high ticket). Kept as the money view.
-  const topProducts: TopProduct[] = sorted.slice(0, 10).map(toTP);
-  // Top 10 by UNITS SOLD — surfaces cheaper, high-volume items (shirts, polos, socks)
-  // that revenue ranking hides. Same data, different lens.
-  const topByUnits: TopProduct[] = [...Object.values(productMap)]
-    .sort((a, b) => b.units - a.units)
-    .slice(0, 10)
-    .map(toTP);
-  const lowProducts: TopProduct[] = sorted.slice(-3).map(toTP);
+  type ProductBucket = {
+    revenue: number;
+    units: number;
+    name: string;
+    family: string;
+    category: string;
+    variants: Set<string>;
+  };
 
-  // ─── Revenue by day (current window) ──────────────────────────────
+  const buildProductMap = (periodOrders: any[]): Record<string, ProductBucket> => {
+    const map: Record<string, ProductBucket> = {};
+    for (const order of periodOrders) {
+      for (const item of order.line_items ?? []) {
+        const rawName = item.title || "Product";
+        const category = inferCategory(rawName);
+        const family = `${category}:${productFamily(rawName) || rawName.toLowerCase()}`;
+        if (!map[family]) {
+          map[family] = {
+            revenue: 0,
+            units: 0,
+            name: rawName,
+            family,
+            category,
+            variants: new Set<string>(),
+          };
+        }
+        map[family].revenue += parseFloat(item.price) * item.quantity;
+        map[family].units += item.quantity;
+        map[family].variants.add(rawName);
+      }
+    }
+    return map;
+  };
+
+  const productMap = buildProductMap(cur.created);
+  const priorProductMap = buildProductMap(prior.created);
+  const productRows: TopProduct[] = Object.values(productMap).map((p) => {
+    const previousRevenue = priorProductMap[p.family]?.revenue ?? 0;
+    const growth = previousRevenue > 0
+      ? Math.round(((p.revenue - previousRevenue) / previousRevenue) * 100 * 10) / 10
+      : null;
+
+    return {
+      name: displayFamilyName(p.name, p.variants.size),
+      revenue: Math.round(p.revenue),
+      units: p.units,
+      growth,
+      category: p.category,
+      family: p.family,
+      variants: p.variants.size,
+    };
+  });
+
+  const diversify = (rows: TopProduct[], limit: number, sortBy: "revenue" | "units"): TopProduct[] => {
+    const sortedRows = [...rows].sort((a, b) =>
+      sortBy === "revenue"
+        ? b.revenue - a.revenue || b.units - a.units
+        : b.units - a.units || b.revenue - a.revenue
+    );
+    const picked: TopProduct[] = [];
+    const perCategory = new Map<string, number>();
+
+    for (const row of sortedRows) {
+      if ((perCategory.get(row.category) ?? 0) >= 2) continue;
+      picked.push({ ...row, method: sortBy });
+      perCategory.set(row.category, (perCategory.get(row.category) ?? 0) + 1);
+      if (picked.length >= limit) return picked;
+    }
+
+    for (const row of sortedRows) {
+      if (picked.some((p) => p.family === row.family)) continue;
+      picked.push({ ...row, method: "category-diverse" });
+      if (picked.length >= limit) return picked;
+    }
+
+    return picked;
+  };
+
+  const topProducts: TopProduct[] = diversify(productRows, 10, "revenue");
+  const topByUnits: TopProduct[] = diversify(productRows, 10, "units");
+  const lowProducts: TopProduct[] = [...productRows]
+    .filter((p) => p.units > 0)
+    .sort((a, b) => a.units - b.units || a.revenue - b.revenue)
+    .slice(0, 3);
   const dayMap: Record<string, { revenue: number; orders: number }> = {};
   for (const order of cur.created) {
     const day = order.created_at?.split("T")[0];
@@ -466,6 +548,9 @@ export async function getSalesData(
 
 // Summary string for Claude campaign generator
 export function buildSalesSummary(data: SalesData): string {
+  const growthLabel = (growth: number | null) =>
+    growth === null ? "no prior-period data" : `${growth > 0 ? "+" : ""}${growth}% growth`;
+
   return `
 SHOPIFY SALES DATA (Last 30 Days):
 Total Revenue: EGP ${data.totalRevenue.toLocaleString()}
@@ -476,10 +561,13 @@ Weekly Growth: ${data.weeklyGrowth}%
 Abandoned Carts: ${data.abandonedCarts}
 Repeat Purchase Rate: ${data.repeatPurchaseRate}%
 
-TOP SELLING PRODUCTS:
-${data.topProducts.map((p, i) => `${i + 1}. ${p.name} — EGP ${p.revenue.toLocaleString()} revenue, ${p.units} units, ${p.growth > 0 ? "+" : ""}${p.growth}% growth`).join("\n")}
+TOP SELLING PRODUCT FAMILIES (grouped variants, category-diverse):
+${data.topProducts.map((p, i) => `${i + 1}. ${p.name} - ${p.category}, EGP ${p.revenue.toLocaleString()} revenue, ${p.units} units, ${growthLabel(p.growth)}`).join("\n")}
+
+TOP PRODUCTS BY UNITS SOLD:
+${(data.topByUnits ?? []).map((p, i) => `${i + 1}. ${p.name} - ${p.category}, ${p.units} units, EGP ${p.revenue.toLocaleString()}`).join("\n")}
 
 LOW PERFORMERS (need push or markdown):
-${data.lowProducts.map((p) => `- ${p.name} — EGP ${p.revenue.toLocaleString()}, ${p.growth}% change`).join("\n")}
+${data.lowProducts.map((p) => `- ${p.name} - ${p.category}, EGP ${p.revenue.toLocaleString()}, ${p.units} units, ${growthLabel(p.growth)}`).join("\n")}
 `.trim();
 }

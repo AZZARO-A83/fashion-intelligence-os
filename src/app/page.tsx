@@ -47,7 +47,14 @@ interface DashboardData {
     recommendations: string[];
   };
   recentInsights: string[];
-  topProducts: { name: string; revenue: number; units: number }[];
+  topProducts: {
+    name: string;
+    revenue: number;
+    units: number;
+    category: string;
+    growth: number | null;
+    variants?: number;
+  }[];
   revenueByDay: { date: string; revenue: number; orders: number }[];
 }
 
@@ -244,7 +251,7 @@ export default function DashboardPage() {
               <h2 className="text-sm font-semibold text-foreground">AI Insights</h2>
             </div>
             <div className="space-y-3">
-              {recentInsights.slice(0, 4).map((insight, i) => (
+              {recentInsights.slice(0, 5).map((insight, i) => (
                 <div key={i} className="flex gap-2.5">
                   <div className="w-1 bg-accent/40 rounded-full flex-shrink-0 mt-1" />
                   <p className="text-xs text-foreground-muted leading-relaxed">{insight}</p>
@@ -280,8 +287,13 @@ export default function DashboardPage() {
                   <div key={i} className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
                     <span className="text-xs font-bold text-accent w-5 flex-shrink-0">{i + 1}.</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                      <p className="text-xs text-muted">{p.units} sold</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                        <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded flex-shrink-0">{p.category}</span>
+                      </div>
+                      <p className="text-xs text-muted">
+                        {p.units} units sold{(p.variants ?? 1) > 1 ? ` - ${p.variants} variants grouped` : ""}
+                      </p>
                     </div>
                     <span className="text-sm font-semibold text-foreground">{formatCurrency(p.revenue)}</span>
                   </div>

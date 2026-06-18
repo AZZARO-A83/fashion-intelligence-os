@@ -17,6 +17,27 @@ function fmtDay(iso: string) {
   return new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function GrowthBadge({ growth }: { growth: number | null }) {
+  if (growth === null) return <span className="text-xs font-medium text-muted">No prior data</span>;
+  if (growth > 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <TrendingUp className="w-3 h-3 text-green-400" />
+        <span className="text-xs font-medium text-green-400">+{growth}%</span>
+      </div>
+    );
+  }
+  if (growth < 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <TrendingDown className="w-3 h-3 text-red-400" />
+        <span className="text-xs font-medium text-red-400">{growth}%</span>
+      </div>
+    );
+  }
+  return <span className="text-xs font-medium text-foreground-muted">0% vs prior</span>;
+}
+
 
 export default function SalesPage() {
   const [data, setData] = useState<SalesView | null>(null);
@@ -125,24 +146,29 @@ export default function SalesPage() {
 
           {/* Top Products */}
           <div className="bg-surface border border-border/50 rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-4">Top Performing Products</h2>
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-foreground">Top Performing Products</h2>
+              <p className="text-xs text-muted mt-1">Grouped by product family, max 2 per category, ranked by revenue.</p>
+            </div>
             <div className="space-y-3">
               {data.topProducts.map((p, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
                   <span className="text-xs font-bold text-muted w-5 text-center">#{i + 1}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                    <p className="text-xs text-muted mt-0.5">{p.units} units · EGP {p.revenue.toLocaleString()}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                      <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded flex-shrink-0">{p.category}</span>
+                    </div>
+                    <p className="text-xs text-muted mt-0.5">
+                      {p.units} units sold - EGP {p.revenue.toLocaleString()}
+                      {(p.variants ?? 1) > 1 ? ` - ${p.variants} variants grouped` : ""}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-green-400" />
-                    <span className="text-xs font-medium text-green-400">+{p.growth}%</span>
-                  </div>
+                  <GrowthBadge growth={p.growth} />
                 </div>
               ))}
             </div>
           </div>
-
           {/* Top Products Bar Chart */}
           <div className="bg-surface border border-border/50 rounded-xl p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4">Revenue by Product</h2>
@@ -154,7 +180,10 @@ export default function SalesPage() {
                 />
                 <Tooltip
                   contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 11 }}
-                  formatter={(v: number) => [`EGP ${v.toLocaleString()}`, "Revenue"]}
+                  formatter={(v: number, _name: string, props: any) => [
+                    `EGP ${v.toLocaleString()}`,
+                    `${props.payload.units} units sold`,
+                  ]}
                 />
                 <Bar dataKey="revenue" fill="#f59e0b" radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -166,26 +195,22 @@ export default function SalesPage() {
         <div className="bg-surface border border-border/50 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingDown className="w-4 h-4 text-red-400" />
-            <h2 className="text-sm font-semibold text-foreground">Low Performing Products</h2>
+            <h2 className="text-sm font-semibold text-foreground">Low Movement Products</h2>
             <Badge variant="danger">Action needed</Badge>
           </div>
           <div className="grid grid-cols-3 gap-3">
             {data.lowProducts.map((p, i) => (
               <div key={i} className="p-4 bg-red-400/5 border border-red-400/20 rounded-lg">
                 <p className="text-sm font-medium text-foreground">{p.name}</p>
-                <p className="text-xs text-muted mt-1">EGP {p.revenue.toLocaleString()} · {p.units} units</p>
-                <div className="flex items-center gap-1 mt-2">
-                  <TrendingDown className="w-3 h-3 text-red-400" />
-                  <span className="text-xs text-red-400 font-medium">{p.growth}% decline</span>
-                </div>
+                <p className="text-xs text-muted mt-1">{p.category} - EGP {p.revenue.toLocaleString()} - {p.units} units sold</p>
+                <div className="mt-2"><GrowthBadge growth={p.growth} /></div>
                 <p className="text-[10px] text-muted mt-2">
-                  {p.growth < -30 ? "Consider markdown or bundle promotion" : "Monitor — seasonal dip expected"}
+                  {p.growth !== null && p.growth < -30 ? "Consider markdown or bundle promotion" : "Low unit movement - test bundle, styling angle, or homepage placement"}
                 </p>
               </div>
             ))}
           </div>
         </div>
-
         {/* AI insights moved to Analytics tab — see /analytics */}
 
       </div>

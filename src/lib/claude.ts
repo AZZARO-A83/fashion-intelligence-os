@@ -167,6 +167,35 @@ Return ONLY valid JSON. No markdown. No explanation.
 }
 
 // ─── Sales Insight Analyzer ──────────────────────────────────────────
+function salesGrowthLabel(growth: number | null): string {
+  return growth === null ? "no prior-period data" : `${growth > 0 ? "+" : ""}${growth}% growth`;
+}
+
+function fallbackSalesInsights(salesData: SalesData): string[] {
+  const topRevenue = salesData.topProducts[0];
+  const topUnits = salesData.topByUnits?.[0];
+  const low = salesData.lowProducts[0];
+  const insights: string[] = [];
+
+  if (topRevenue) {
+    insights.push(`${topRevenue.name} is the revenue leader: EGP ${topRevenue.revenue.toLocaleString()} from ${topRevenue.units} units. Use it as the main creative and landing-page product.`);
+  }
+  if (topUnits) {
+    insights.push(`${topUnits.name} is the unit leader with ${topUnits.units} units sold. Use it for bundles, reels, and retargeting because it shows stronger purchase frequency.`);
+  }
+  if (salesData.recoveryOpportunity) {
+    insights.push(`Abandoned cart recovery can target about EGP ${salesData.recoveryOpportunity.toLocaleString()} in recoverable value. Start with WhatsApp/SMS before increasing ad spend.`);
+  }
+  if (salesData.avgOrderValue) {
+    insights.push(`Average order value is EGP ${salesData.avgOrderValue.toLocaleString()}. Add complementary products near EGP 800-2,500 to lift checkout value.`);
+  }
+  if (low) {
+    insights.push(`${low.name} has low movement at ${low.units} units. Test a bundle, styling angle, or temporary placement before markdown.`);
+  }
+
+  return insights.slice(0, 5);
+}
+
 export async function analyzeSalesData(salesData: SalesData): Promise<string[]> {
   const prompt = `
 Analyze this Shopify sales data for DEBACKERS Egypt and generate 5 specific, actionable insights.
@@ -181,10 +210,13 @@ SALES DATA:
 - Abandoned Carts: ${salesData.abandonedCarts}
 
 TOP PRODUCTS:
-${salesData.topProducts.map((p) => `- ${p.name}: EGP ${p.revenue} revenue, ${p.growth > 0 ? "+" : ""}${p.growth}% growth`).join("\n")}
+${salesData.topProducts.map((p) => `- ${p.name}: ${p.category}, EGP ${p.revenue} revenue, ${p.units} units, ${salesGrowthLabel(p.growth)}`).join("\n")}
+
+TOP BY UNITS:
+${(salesData.topByUnits ?? []).map((p) => `- ${p.name}: ${p.category}, ${p.units} units, EGP ${p.revenue} revenue`).join("\n")}
 
 LOW PERFORMING:
-${salesData.lowProducts.map((p) => `- ${p.name}: EGP ${p.revenue} revenue, ${p.growth}% growth`).join("\n")}
+${salesData.lowProducts.map((p) => `- ${p.name}: ${p.category}, EGP ${p.revenue} revenue, ${p.units} units, ${salesGrowthLabel(p.growth)}`).join("\n")}
 
 Generate exactly 5 insight strings. Be specific with numbers. Like:
 "Linen shirts increased by 32% in the last 14 days — strong signal for summer push."
@@ -197,16 +229,9 @@ Return a JSON array of 5 strings ONLY. No markdown.
   try {
     return parseJson<string[]>(text);
   } catch {
-    return [
-      "Linen shirt sales +32% — strongest summer signal in the catalog.",
-      "Women summer co-ord sets +41% — faster than forecast, increase stock.",
-      "847 abandoned carts — SMS recovery could recapture EGP 45,000/month.",
-      "Repeat purchase rate 28% — above category average, build loyalty program.",
-      "Winter Wool Coat -45% — seasonal decline, consider markdown bundle.",
-    ];
+    return fallbackSalesInsights(salesData);
   }
 }
-
 // ─── Trend Analyzer ──────────────────────────────────────────────────
 export async function analyzeTrendRelevance(
   trends: Trend[],

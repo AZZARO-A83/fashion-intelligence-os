@@ -11,8 +11,11 @@ export interface TopProduct {
   name: string;
   revenue: number;
   units: number;
-  growth: number;
+  growth: number | null;
   category: string;
+  family?: string;
+  variants?: number;
+  method?: "revenue" | "units" | "category-diverse";
 }
 
 export interface SalesData {
