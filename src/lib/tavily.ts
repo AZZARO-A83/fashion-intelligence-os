@@ -14,11 +14,15 @@ export const FASHION_SOURCE_DOMAINS = [
   "thebeesmagazine.com", "modash.io", "ellearabia.com",
   "harpersbazaararabia.com", "vogue.com", "businessoffashion.com",
   "scoopempire.com", "fibre2fashion.com", "fustany.com", "gqmiddleeast.com",
+  "cairoscene.com", "identity-mag.com", "egypttoday.com", "whatwomenwant-mag.com",
+  "en.vogue.me", "graziamagazine.com", "sayidaty.net", "hiamag.com",
 ];
 
 const FASHION_NEWS_DOMAINS = [
   "fibre2fashion.com", "businessoffashion.com", "vogue.com",
   "harpersbazaararabia.com", "scoopempire.com", "wwd.com",
+  "fustany.com", "cairoscene.com", "identity-mag.com", "egypttoday.com",
+  "sayidaty.net", "hiamag.com",
 ];
 
 interface TavilyResult {

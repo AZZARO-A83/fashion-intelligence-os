@@ -32,8 +32,23 @@ const URGENCY_LABELS = {
 };
 
 
+const ARABIC_TEXT = /[\u0600-\u06FF]/;
+const cleanSignal = (s: string) => !/^[ISLBislib]\d+$/.test(s.trim()) && s.trim().length > 3;
+const uniqueSignals = (values: string[]) => values.filter((v, i, a) => cleanSignal(v) && a.indexOf(v) === i);
+
 function TrendCard({ trend }: { trend: RichTrend }) {
   const [expanded, setExpanded] = useState(false);
+  const men = trend.searchDemandMen ?? [];
+  const women = trend.searchDemandWomen ?? [];
+  const allDemand = uniqueSignals([...(trend.searchDemand ?? []), ...men, ...women, ...(trend.signalsVerified ?? [])]);
+  const arabicEvidence = uniqueSignals([
+    ...(trend.arabicEvidence ?? []),
+    ...allDemand.filter((s) => ARABIC_TEXT.test(s)),
+  ]).slice(0, 12);
+  const englishEvidence = uniqueSignals([
+    ...(trend.englishEvidence ?? []),
+    ...allDemand.filter((s) => !ARABIC_TEXT.test(s)),
+  ]).slice(0, 8);
 
   return (
     <div className={cn(
@@ -177,6 +192,22 @@ function TrendCard({ trend }: { trend: RichTrend }) {
           )}
 
           {/* LAYER 1 — INFLUENCE (what influencers are leading) */}
+          <div className="bg-green-400/5 border border-green-400/20 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[10px] font-bold text-green-300 uppercase tracking-wider">Arabic Evidence - Egypt search signals</p>
+              <span className="text-[9px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded font-bold">70% weight</span>
+            </div>
+            {arabicEvidence.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5" dir="rtl">
+                {arabicEvidence.map((s, i) => (
+                  <span key={i} className="text-[10px] bg-surface text-green-200 border border-green-400/20 px-2 py-1 rounded-full font-arabic">{s}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-amber-300/80">No Arabic query returned for this trend yet. English Egypt signals below still count at 30%.</p>
+            )}
+          </div>
+
           <div className="bg-orange-400/5 border border-orange-400/20 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <p className="text-[10px] font-bold text-orange-300 uppercase tracking-wider">🎙️ Influence Layer — What influencers are leading</p>
@@ -190,9 +221,9 @@ function TrendCard({ trend }: { trend: RichTrend }) {
               )}
               {trend.gender && <span className="text-[9px] text-muted capitalize">· {trend.gender}</span>}
             </div>
-            {trend.signalsVerified && trend.signalsVerified.filter(s => !/^[ISLBislib]\d+$/.test(s.trim()) && s.trim().length > 3).length > 0 && (
+            {englishEvidence.length > 0 && (
               <div className="space-y-1 mb-2">
-                {trend.signalsVerified.filter(s => !/^[ISLBislib]\d+$/.test(s.trim()) && s.trim().length > 3).map((s, i) => (
+                {englishEvidence.map((s, i) => (
                   <p key={i} className="text-[10px] text-green-300 flex gap-1.5"><span className="text-green-400">✓</span>{s}</p>
                 ))}
               </div>

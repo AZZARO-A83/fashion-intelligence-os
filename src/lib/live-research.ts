@@ -57,6 +57,9 @@ function parseJson<T>(text: string): T {
   return JSON.parse(slice) as T;
 }
 
+const ARABIC_TEXT = /[\u0600-\u06FF]/;
+const unique = (values: string[]) => values.filter((v, i, a) => !!v && a.indexOf(v) === i);
+
 // ─── LIVE TRENDS (deterministic clusters → AI copy) ───────────────────────
 export interface LiveTrendsResult {
   trends: RichTrend[];
@@ -149,15 +152,20 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
       getSerperDynamicSearchSignals(),
       // Layer 1 — influence sources (for the Sources panel + article support)
       collectSources([
-        { q: "Egyptian fashion influencers men women 2026 trending outfits مؤثرين موضة مصر", days: 21, domains: null },
-        { q: "Egypt TikTok Instagram fashion creators style new collection 2026", days: 14, domains: null },
-        { q: "مؤثرات مؤثرين مصر موضة ملابس رجالي نسائي 2026 ستايل جديد", days: 21, domains: null },
+        { q: "موضة مصر صيف 2026 ملابس رجالي نسائي ترندات القاهرة انستجرام تيك توك", days: 21, domains: null },
+        { q: "بلوجرز موضة مصر ستايل صيف 2026 قميص كتان بنطلون فستان توب", days: 21, domains: null },
+        { q: "site:instagram.com مصر موضة ملابس صيف 2026 رجالي نسائي القاهرة الساحل", days: 21, domains: null },
+        { q: "site:tiktok.com مصر ترند ملابس صيف 2026 رجالي نسائي قميص فستان بنطلون", days: 21, domains: null },
+        { q: "site:facebook.com مصر ملابس صيف 2026 كولكشن جديد رجالي نسائي", days: 21, domains: null },
+        { q: "Egyptian fashion influencers Cairo summer outfits men women 2026", days: 21, domains: null },
       ]),
       // Layer 2 — search-demand articles (context + article support)
       collectSources([
+        { q: "شراء ملابس رجالي مصر صيف 2026 قميص كتان بولو تشينو بدلة", days: 30, domains: null },
+        { q: "شراء ملابس نسائي مصر صيف 2026 فستان توب بلوزة جيبة ست", days: 30, domains: null },
+        { q: "ترندات لبس القاهرة صيف 2026 رجالي نسائي الساحل الشمالي", days: 21, domains: null },
         { q: "men Egypt fashion buy 2026 polo shirt chino jeans suit blazer", days: 30, domains: null },
         { q: "women Egypt fashion buy 2026 dress jeans skirt blouse co-ord set", days: 30, domains: null },
-        { q: "Egyptian street style what people wearing Cairo summer 2026 براندات", days: 21, domains: null },
       ]),
       getShopifyProductImages(60),
       getCachedReport<SearchDemandResult>(CACHE_KEYS.searchDemand),
@@ -341,7 +349,9 @@ function buildTrendFromCluster(
   const signalLayer: "influence" | "search-demand" | "both" =
     articleGarments.has(c.garmentType) ? "both" : "search-demand";
 
-  const genderSignals = c.exampleQueries.concat(c.signals).filter((v, i, a) => a.indexOf(v) === i);
+  const genderSignals = unique(c.exampleQueries.concat(c.signals));
+  const arabicEvidence = genderSignals.filter((s) => ARABIC_TEXT.test(s)).slice(0, 10);
+  const englishEvidence = genderSignals.filter((s) => !ARABIC_TEXT.test(s)).slice(0, 10);
   const menList = c.gender === "men" ? c.signals.slice(0, 18) : [];
   const womenList = c.gender === "women" ? c.signals.slice(0, 18) : [];
 
@@ -392,7 +402,9 @@ function buildTrendFromCluster(
     searchSeed: c.garmentType,
     searchDemandMen: menList,
     searchDemandWomen: womenList,
-    searchDemand: genderSignals.slice(0, 6),
+    searchDemand: [...arabicEvidence, ...englishEvidence].slice(0, 10),
+    arabicEvidence,
+    englishEvidence,
     // deterministic cluster layer
     garmentType: c.garmentType,
     garmentFamily: c.garmentFamily,
@@ -544,6 +556,9 @@ export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
       { q: "ملابس رجالي صيف 2026 مصر قمصان بولو بناطيل كتان", days: 30 },
       { q: "ملابس نسائي صيف 2026 مصر فساتين بلوزات بناطيل ستات", days: 30 },
       { q: "موضة مصر كولكشن جديد رجالي نسائي صيف 2026", days: 30, topic: "news" },
+      { q: "site:instagram.com مصر موضة ملابس صيف 2026 رجالي نسائي", days: 30 },
+      { q: "site:tiktok.com مصر ترند ملابس صيف 2026 قميص فستان بنطلون", days: 30 },
+      { q: "site:facebook.com مصر ملابس صيف 2026 كولكشن جديد رجالي نسائي", days: 30 },
       { q: "Egypt Sahel North Coast summer outfits men women 2026 ملابس صيف", days: 30 },
     ]),
     getSerperDynamicSearchSignals(),

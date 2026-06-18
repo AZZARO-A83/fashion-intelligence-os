@@ -19,6 +19,7 @@ export interface TrendAlert {
   status: AlertStatus;
   source: string;              // where we found it
   signals: string[];           // what data points confirm it
+  arabicEvidence?: string[];    // Arabic/Egyptian Arabic proof shown first
   relevanceToDebackers: string;
   suggestedAction: string;     // specific recommendation
   relatedCampaigns?: string[]; // which existing campaigns this affects

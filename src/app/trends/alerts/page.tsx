@@ -35,12 +35,20 @@ const STATUS_STYLES: Record<AlertStatus, string> = {
   dismissed: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
 };
 
+const ARABIC_TEXT = /[\u0600-\u06FF]/;
+const uniqueSignals = (values: string[]) => values.filter((v, i, a) => v && v.trim().length > 3 && a.indexOf(v) === i);
+
 function AlertCard({ alert, onAction, onDismiss }: {
   alert: TrendAlert;
   onAction: (id: string) => void;
   onDismiss: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(alert.priority === "urgent");
+  const arabicEvidence = uniqueSignals([
+    ...(alert.arabicEvidence ?? []),
+    ...(alert.signals ?? []).filter((s) => ARABIC_TEXT.test(s)),
+  ]).slice(0, 10);
+  const englishSignals = uniqueSignals((alert.signals ?? []).filter((s) => !ARABIC_TEXT.test(s))).slice(0, 8);
 
   return (
     <div className={cn(
@@ -134,8 +142,21 @@ function AlertCard({ alert, onAction, onDismiss }: {
           {/* Signals */}
           <div>
             <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">Data Signals</p>
+            {arabicEvidence.length > 0 && (
+              <div className="bg-green-400/5 border border-green-400/20 rounded-lg p-3 mb-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-[10px] font-bold text-green-300 uppercase tracking-wider">Arabic Evidence</p>
+                  <span className="text-[9px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded font-bold">70% weight</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5" dir="rtl">
+                  {arabicEvidence.map((signal, i) => (
+                    <span key={i} className="text-[10px] bg-surface text-green-200 border border-green-400/20 px-2 py-1 rounded-full font-arabic">{signal}</span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="space-y-1.5">
-              {alert.signals.map((signal, i) => (
+              {(englishSignals.length ? englishSignals : alert.signals).map((signal, i) => (
                 <div key={i} className="flex gap-2 bg-surface-2 rounded-lg px-3 py-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0 mt-1.5" />
                   <p className="text-xs text-foreground-muted">{signal}</p>

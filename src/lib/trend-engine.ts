@@ -75,6 +75,8 @@ export interface RichTrend {
   searchDemand?: string[];        // real autocomplete suggestions (demand direction)
   searchDemandMen?: string[];     // top searches men type about this garment
   searchDemandWomen?: string[];   // top searches women type about this garment
+  arabicEvidence?: string[];       // Arabic/Egyptian Arabic demand signals shown first in UI
+  englishEvidence?: string[];      // English demand signals kept for comparison
 
   // ─── Deterministic cluster layer (classified BEFORE the AI) ──────────
   // These come from the garment classifier, never from the model.
