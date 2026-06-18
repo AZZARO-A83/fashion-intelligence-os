@@ -241,6 +241,7 @@ export function validateProductMatches(
 export interface ScoreContext {
   products: ShopProduct[];
   articleGarments: Set<string>;   // garment types confirmed by Layer 1/2 articles
+  customerDemandQueries?: Set<string>; // cached Google/Search Demand terms, no fresh calls
 }
 
 export function scoreCluster(cluster: DemandCluster, ctx: ScoreContext): DemandCluster {
@@ -256,14 +257,24 @@ export function scoreCluster(cluster: DemandCluster, ctx: ScoreContext): DemandC
   const catalogMatchScore = cluster.inCatalog ? 100 : (cluster.catalogPath ? 50 : 0);
 
   const articleSupportScore = ctx.articleGarments.has(cluster.garmentType) ? 100 : 0;
+  const customerDemandScore = scoreCustomerDemandMatch(cluster, ctx.customerDemandQueries);
 
-  const score = Math.round(
-    recurrenceScore * 0.45 +
-    multiSourceScore * 0.20 +
-    buyingIntentScore * 0.15 +
-    catalogMatchScore * 0.15 +
-    articleSupportScore * 0.05
-  );
+  const score = ctx.customerDemandQueries?.size
+    ? Math.round(
+        recurrenceScore * 0.35 +
+        multiSourceScore * 0.15 +
+        buyingIntentScore * 0.10 +
+        catalogMatchScore * 0.15 +
+        articleSupportScore * 0.05 +
+        customerDemandScore * 0.20
+      )
+    : Math.round(
+        recurrenceScore * 0.45 +
+        multiSourceScore * 0.20 +
+        buyingIntentScore * 0.15 +
+        catalogMatchScore * 0.15 +
+        articleSupportScore * 0.05
+      );
 
   cluster.score = score;
   cluster.scoreBreakdown = {
@@ -272,11 +283,40 @@ export function scoreCluster(cluster: DemandCluster, ctx: ScoreContext): DemandC
     buyingIntent: Math.round(buyingIntentScore),
     catalogMatch: catalogMatchScore,
     articleSupport: articleSupportScore,
+    customerDemand: customerDemandScore,
   };
   cluster.confidence =
     score >= 70 && cluster.uniqueSignals >= 5 ? "strong" :
     score >= 45 ? "medium" : "weak";
   return cluster;
+}
+
+function scoreCustomerDemandMatch(
+  cluster: DemandCluster,
+  customerDemandQueries?: Set<string>
+): number {
+  if (!customerDemandQueries?.size) return 0;
+
+  const tokens = [
+    cluster.garmentType,
+    cluster.garmentFamily,
+    cluster.topFabric,
+    ...cluster.topModifiers,
+    ...cluster.topColors,
+  ]
+    .filter((v): v is string => !!v && v.length > 2)
+    .map(normalize);
+
+  let matches = 0;
+  for (const query of customerDemandQueries) {
+    const q = normalize(query);
+    if (!q) continue;
+    if (tokens.some((token) => q.includes(token) || token.includes(q))) {
+      matches += 1;
+    }
+  }
+
+  return Math.min(100, matches * 25);
 }
 
 // ─── 5. SEASON GUARD ──────────────────────────────────────────────────────

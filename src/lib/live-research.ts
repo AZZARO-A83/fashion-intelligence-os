@@ -15,6 +15,7 @@
 
 import { callClaude } from "./claude-api";
 import { buildSystemPrompt } from "./egyptian-context";
+import { getCachedReport, CACHE_KEYS } from "./cache";
 import {
   searchEgyptianFashionTrends,
   searchMarketIntelligence,
@@ -30,6 +31,7 @@ import {
   classifySearchQuery, buildDemandClusters, scoreCluster, applySeasonGuard,
   buildTrendName, ClassifiedQuery, DemandCluster, ShopProduct,
 } from "./query-classifier";
+import type { SearchDemandResult } from "./search-demand-engine";
 
 export type { Source };
 
@@ -79,6 +81,15 @@ const GARMENT_LABELS: Record<string, string> = {
 };
 const label = (t: string) => GARMENT_LABELS[t] || t;
 
+function cachedCustomerDemandQueries(result: SearchDemandResult | null | undefined): Set<string> {
+  const queries = [
+    ...(result?.men ?? []).map((x) => x.query),
+    ...(result?.women ?? []).map((x) => x.query),
+    ...(result?.fabrics ?? []).map((x) => x.fabric),
+  ].filter(Boolean);
+  return new Set(queries.map((q) => q.toLowerCase().trim()).filter(Boolean));
+}
+
 interface Seed { garment: string; gender: "men" | "women"; en: string; ar: string; }
 
 // Build the seed list from the catalog taxonomy: every garment Debackers
@@ -115,7 +126,7 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   const seeds = buildSeeds();
 
   // ── Fire everything in parallel ──────────────────────────────────────
-  const [autocompleteRaw, dynamicSignals, influenceSources, demandSources, products] =
+  const [autocompleteRaw, dynamicSignals, influenceSources, demandSources, products, cachedDemand] =
     await Promise.all([
       // Real consumer search demand — autocomplete for every seed (men + women)
       Promise.all(
@@ -143,6 +154,7 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
         { q: "Egyptian street style what people wearing Cairo summer 2026 براندات", days: 21, domains: null },
       ]),
       getShopifyProductImages(60),
+      getCachedReport<SearchDemandResult>(CACHE_KEYS.searchDemand),
     ]);
 
   const influenceFiltered = refineSources(influenceSources);
@@ -185,7 +197,8 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   const allClusters = buildDemandClusters(classified);
   const { active, backlog: backlogClusters } = applySeasonGuard(allClusters, seasonMode);
 
-  const ctx = { products: products as ShopProduct[], articleGarments };
+  const customerDemandQueries = cachedCustomerDemandQueries(cachedDemand?.data);
+  const ctx = { products: products as ShopProduct[], articleGarments, customerDemandQueries };
   for (const c of active) scoreCluster(c, ctx);
 
   // Qualifying clusters drive the demand map + trends (≥3 unique signals).
@@ -337,6 +350,9 @@ function buildTrendFromCluster(
     signals: [
       { source: "search-demand", metric: "unique search signals", value: String(c.uniqueSignals), weight: score, direction: "up" },
       { source: "search-demand", metric: "buying-intent share", value: `${c.totalSignals ? Math.round((c.buyingSignals / c.totalSignals) * 100) : 0}%`, weight: c.scoreBreakdown?.buyingIntent ?? 0, direction: "up" },
+      ...(c.scoreBreakdown?.customerDemand ? [
+        { source: "cached-google-demand", metric: "customer demand match", value: `${c.scoreBreakdown.customerDemand}%`, weight: c.scoreBreakdown.customerDemand, direction: "up" as const },
+      ] : []),
     ],
     competitorReaction: {
       tieHouse: copy?.competitorReaction?.tieHouse || "—",
