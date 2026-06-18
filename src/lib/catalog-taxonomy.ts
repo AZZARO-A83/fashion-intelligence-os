@@ -111,6 +111,12 @@ export const GARMENTS: GarmentDef[] = [
     catalog: { women: "For Her > Cardigan" },
   },
   {
+    type: "vest", family: "Vests", priority: 84,
+    en: ["vest", "vests", "women vest", "women's vest", "sleeveless vest", "tailored vest", "waistcoat"],
+    ar: ["فيست", "فست", "جيليه", "ويست كوت"],
+    catalog: { women: "For Her > Women Vest" },
+  },
+  {
     type: "jumpsuit", family: "One-Piece", priority: 84,
     en: ["jumpsuit", "jumpsuits", "playsuit", "romper"],
     ar: ["جمبسوت", "جامبسوت", "اوفرول"],
@@ -214,6 +220,39 @@ export const GARMENTS: GarmentDef[] = [
     ar: ["طقم", "سيت", "طقم رجالي", "طقم حريمي", "طقم كاجوال"],
     catalog: { men: "For Him > Set", women: "For Her > Set" },
   },
+  // Shoes & accessories
+  {
+    type: "shoes", family: "Shoes & Accessories", priority: 44,
+    en: ["shoe", "shoes", "loafer", "loafers", "sneaker", "sneakers", "formal shoes", "casual shoes"],
+    ar: ["حذاء", "جزمة", "جزم", "لوفر", "كوتشي"],
+    catalog: { men: "For Him > Shoes & Accessories > Shoes" },
+  },
+  {
+    type: "tie", family: "Shoes & Accessories", priority: 43,
+    en: ["tie", "ties", "necktie", "bow tie"],
+    ar: ["كرافت", "كرافات", "بابيون"],
+    menOnly: true,
+    catalog: { men: "For Him > Shoes & Accessories > Ties" },
+  },
+  {
+    type: "belt", family: "Shoes & Accessories", priority: 42,
+    en: ["belt", "belts", "leather belt", "formal belt", "casual belt"],
+    ar: ["حزام", "احزمة"],
+    catalog: { men: "For Him > Shoes & Accessories > Belts" },
+  },
+  {
+    type: "cufflink", family: "Shoes & Accessories", priority: 41,
+    en: ["cufflink", "cufflinks", "suit brooch", "suit brooches", "brooch"],
+    ar: ["زرار اكمام", "كافلينك", "بروش"],
+    menOnly: true,
+    catalog: { men: "For Him > Shoes & Accessories > Cufflinks & Suit Brooches" },
+  },
+  {
+    type: "socks", family: "Shoes & Accessories", priority: 40,
+    en: ["sock", "socks", "dress socks", "cotton socks"],
+    ar: ["شراب", "شرابات"],
+    catalog: { men: "For Him > Shoes & Accessories > Socks" },
+  },
   // ── Cold-weather garments (always Winter Backlog in summer) ──
   {
     type: "sweater", family: "Knitwear", priority: 32,
@@ -244,6 +283,7 @@ export const GARMENT_PRODUCT_KEYWORDS: Record<string, string[]> = {
   suit: ["suit"],
   jacket: ["jacket"],
   cardigan: ["cardigan"],
+  vest: ["vest", "waistcoat"],
   dress: ["dress"],
   skirt: ["skirt"],
   blouse: ["blouse"],
@@ -253,6 +293,11 @@ export const GARMENT_PRODUCT_KEYWORDS: Record<string, string[]> = {
   abaya: ["abaya"],
   kaftan: ["kaftan", "caftan"],
   shorts: ["short"],
+  shoes: ["shoe", "loafer", "sneaker"],
+  tie: ["tie", "necktie", "bow tie"],
+  belt: ["belt"],
+  cufflink: ["cufflink", "brooch"],
+  socks: ["sock"],
   sweater: ["sweater", "jumper", "pullover", "knit"],
   hoodie: ["hoodie", "sweatshirt"],
   coat: ["coat", "parka", "puffer"],

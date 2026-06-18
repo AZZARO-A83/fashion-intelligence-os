@@ -20,7 +20,7 @@ export interface SearchConsoleResult {
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
-const FASHION_QUERY = /\b(fashion|style|outfit|wear|clothing|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|wide.?leg|summer|beachwear|buy|shop|collection|casual|formal|women|men|ladies|رجالي|نسائي|فستان|قميص|بنطلون|جينز|بلوزة|عباية|كتان|قطن)\b/i;
+const FASHION_QUERY = /\b(fashion|style|outfit|wear|clothing|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|vest|shoe|shoes|loafer|sneaker|tie|belt|cufflink|brooch|socks|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|wide.?leg|summer|beachwear|buy|shop|collection|casual|formal|women|men|ladies|رجالي|نسائي|فستان|قميص|بنطلون|جينز|بلوزة|عباية|فيست|حذاء|جزمة|حزام|كرافت|شراب|كتان|قطن)\b/i;
 const REJECT_QUERY = /\b(job|career|wholesale supplier|factory|login|contact|return policy|tracking|complaint|politics|tourism|weather)\b/i;
 
 function base64url(input: string | Buffer): string {

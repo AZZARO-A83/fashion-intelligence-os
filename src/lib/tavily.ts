@@ -59,7 +59,7 @@ function isFreshSource(date?: string, maxDays = MAX_SOURCE_AGE_DAYS): boolean {
 }
 
 function hasFashionIntent(text: string): boolean {
-  return /\b(fashion|style|outfit|wear|clothing|apparel|collection|new arrival|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|street style|summer|beachwear|sahel|north coast)\b/i.test(text);
+  return /\b(fashion|style|outfit|wear|clothing|apparel|collection|new arrival|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|vest|shoe|shoes|loafer|sneaker|tie|belt|cufflink|brooch|socks|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|street style|summer|beachwear|sahel|north coast)\b/i.test(text);
 }
 
 function isRejectedContext(text: string): boolean {

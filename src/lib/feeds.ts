@@ -137,7 +137,7 @@ const STOPWORDS = new Set([
 // (generic words excluded from scoring so matches mean something; gender and
 // Egypt relevance are carried by the queries' REAL terms: garments, fabrics, colours)
 
-const FASHION_HINT = /\b(colou?r|fabric|linen|cotton|denim|wool|silk|knit|trouser|pant|chino|shirt|tee|polo|blazer|jacket|coat|dress|skirt|abaya|kaftan|suit|silhouette|tailor|wide.?leg|oversized|capsule|collection|runway|menswear|womenswear|beige|stone|olive|navy|pastel|earth tone|palette|modest|beachwear|summer|sahel|north coast)\b/i;
+const FASHION_HINT = /\b(colou?r|fabric|linen|cotton|denim|wool|silk|knit|trouser|pant|chino|shirt|tee|polo|blazer|jacket|coat|dress|skirt|abaya|kaftan|suit|vest|shoe|shoes|loafer|sneaker|tie|belt|cufflink|brooch|socks|silhouette|tailor|wide.?leg|oversized|capsule|collection|runway|menswear|womenswear|beige|stone|olive|navy|pastel|earth tone|palette|modest|beachwear|summer|sahel|north coast)\b/i;
 const REJECT_CONTEXT = /\b(politics|war|refugee|deportation|travel alert|tourism|monorail|museum|ancient|pharaoh|archaeology|stock market|football|crime|court|weather|transport)\b/i;
 
 export async function searchFeedPool(queries: string[], limit = 10): Promise<Source[]> {

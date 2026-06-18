@@ -76,8 +76,9 @@ const AR_GENDER: Record<"men" | "women", string> = { men: "رجالي", women: "
 const GARMENT_LABELS: Record<string, string> = {
   jeans: "Jeans", chino: "Chinos", pants: "Pants", shirt: "Shirts", overshirt: "Over-Shirt",
   polo: "Polo Shirts", tshirt: "T-Shirts", blazer: "Blazers", suit: "Suits", jacket: "Jackets",
-  cardigan: "Cardigans", dress: "Dresses", skirt: "Skirts", blouse: "Blouses", top: "Tops",
+  cardigan: "Cardigans", vest: "Vests", dress: "Dresses", skirt: "Skirts", blouse: "Blouses", top: "Tops",
   set: "Co-ord Sets", jumpsuit: "Jumpsuits", abaya: "Abayas", kaftan: "Kaftans", shorts: "Shorts",
+  shoes: "Shoes", tie: "Ties", belt: "Belts", cufflink: "Cufflinks & Brooches", socks: "Socks",
   sweater: "Sweaters", hoodie: "Hoodies", coat: "Coats",
 };
 const label = (t: string) => GARMENT_LABELS[t] || t;
