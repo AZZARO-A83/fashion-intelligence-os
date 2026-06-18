@@ -307,16 +307,16 @@ function scoreCustomerDemandMatch(
     .filter((v): v is string => !!v && v.length > 2)
     .map(normalize);
 
-  let matches = 0;
+  let weightedMatches = 0;
   for (const query of customerDemandQueries) {
     const q = normalize(query);
     if (!q) continue;
     if (tokens.some((token) => q.includes(token) || token.includes(q))) {
-      matches += 1;
+      weightedMatches += /[؀-ۿ]/.test(q) ? 70 : 30;
     }
   }
 
-  return Math.min(100, matches * 25);
+  return Math.min(100, Math.round(weightedMatches / 2));
 }
 
 // ─── 5. SEASON GUARD ──────────────────────────────────────────────────────

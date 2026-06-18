@@ -59,7 +59,7 @@ function isFreshSource(date?: string, maxDays = MAX_SOURCE_AGE_DAYS): boolean {
 }
 
 function hasFashionIntent(text: string): boolean {
-  return /\b(fashion|style|outfit|wear|clothing|apparel|collection|new arrival|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|vest|shoe|shoes|loafer|sneaker|tie|belt|cufflink|brooch|socks|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|street style|summer|beachwear|sahel|north coast)\b/i.test(text);
+  return /\b(fashion|style|outfit|wear|clothing|apparel|collection|new arrival|dress|shirt|polo|tee|t-shirt|trouser|pants|jeans|chino|blazer|suit|jacket|skirt|blouse|top|co-ord|set|abaya|kaftan|vest|shoe|shoes|loafer|sneaker|tie|belt|cufflink|brooch|socks|linen|cotton|denim|viscose|silk|satin|chiffon|modest|menswear|womenswear|street style|summer|beachwear|sahel|north coast|ملابس|لبس|موضة|ستايل|ترند|كولكشن|تشكيلة|فستان|فساتين|قميص|قمصان|تيشيرت|بولو|بنطلون|بناطيل|جينز|بلوزة|توب|تنورة|جيبة|بدلة|بليزر|جاكيت|عباية|قفطان|فيست|حذاء|جزمة|لوفر|كوتشي|كرافت|حزام|شراب|كتان|قطن|دانتيل|شيفون|ستان|صيف|ساحل|كاجوال|فورمال)\b/i.test(text);
 }
 
 function isRejectedContext(text: string): boolean {
@@ -147,9 +147,9 @@ export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSign
   if (!SERPER_KEY) return { menSignals: [], womenSignals: [], generalSignals: [] };
 
   const queries = [
-    { q: "men fashion Egypt 2026 trending", gender: "men" as const },
-    { q: "women fashion Egypt 2026 trending", gender: "women" as const },
-    { q: "Egyptian clothing trends what people buying 2026", gender: "general" as const },
+    { q: "ملابس رجالي صيف 2026 مصر ترندات قمصان بولو بناطيل", gender: "men" as const },
+    { q: "ملابس نسائي صيف 2026 مصر ترندات فساتين بلوزات بناطيل", gender: "women" as const },
+    { q: "Egyptian clothing trends what people buying 2026 ملابس موضة مصر", gender: "general" as const },
   ];
 
   const results = await Promise.all(
@@ -171,7 +171,7 @@ export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSign
   );
 
   // Fashion-only filter — drop non-buying queries
-  const fashionFilter = /\b(wear|cloth|outfit|dress|shirt|trouser|pant|linen|cotton|fabric|style|fashion|trend|colour|color|brand|buy|shop|summer|winter|casual|formal|look|collection)\b/i;
+  const fashionFilter = /\b(wear|cloth|outfit|dress|shirt|trouser|pant|linen|cotton|fabric|style|fashion|trend|colour|color|brand|buy|shop|summer|winter|casual|formal|look|collection|ملابس|لبس|موضة|ستايل|ترند|فستان|قمصان|قميص|تيشيرت|بولو|بنطلون|بناطيل|جينز|بلوزة|توب|تنورة|جيبة|بدلة|حزام|جزمة|حذاء|صيف|كاجوال|فورمال)\b/i;
   const clean = (arr: string[]) => arr.filter(s => fashionFilter.test(s) && s.length > 8 && s.length < 80);
 
   return {

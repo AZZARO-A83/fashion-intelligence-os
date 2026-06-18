@@ -541,10 +541,10 @@ export interface LiveAlertsResult {
 export async function generateLiveAlerts(): Promise<LiveAlertsResult> {
   const [sources, dynamicSignals] = await Promise.all([
     collectSources([
-      { q: "Egypt men's summer fashion shirts trousers linen polo June 2026", days: 30 },
-      { q: "Egypt women's summer fashion dresses wide leg pants modest sets June 2026", days: 30 },
-      { q: "Cairo Egypt fashion retail new collection men women June 2026", days: 30, topic: "news" },
-      { q: "Egypt Sahel North Coast summer outfits men women 2026", days: 30 },
+      { q: "ملابس رجالي صيف 2026 مصر قمصان بولو بناطيل كتان", days: 30 },
+      { q: "ملابس نسائي صيف 2026 مصر فساتين بلوزات بناطيل ستات", days: 30 },
+      { q: "موضة مصر كولكشن جديد رجالي نسائي صيف 2026", days: 30, topic: "news" },
+      { q: "Egypt Sahel North Coast summer outfits men women 2026 ملابس صيف", days: 30 },
     ]),
     getSerperDynamicSearchSignals(),
   ]);
@@ -563,6 +563,7 @@ From the LIVE signals below, surface the 4 FASTEST-RISING / NEWEST things that n
 Current date: June 2026.
 Freshness rule: use only signals from the last 30 days or Google demand signals collected today.
 Priority rule: Google demand/search intent is the strongest signal because it shows what customers are searching now.
+Language weight rule: Egyptian Arabic signals count 70%, English signals count 30%.
 Reject anything not about clothing, fashion, outfits, fabrics, colours, silhouettes, men/women apparel, or DEBACKERS-relevant retail.
 
 === GOOGLE DEMAND SIGNALS COLLECTED TODAY ===

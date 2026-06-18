@@ -82,7 +82,8 @@ function scoreQuery(q: Omit<SearchConsoleQuery, "score">): number {
   const impressionScore = Math.min(40, Math.log10(q.impressions + 1) * 14);
   const ctrScore = Math.min(10, q.ctr * 100);
   const positionScore = q.position <= 10 ? 5 : q.position <= 20 ? 2 : 0;
-  return Math.round(clickScore + impressionScore + ctrScore + positionScore);
+  const languageBoost = /[؀-ۿ]/.test(q.query) ? 1.7 : 1.0;
+  return Math.min(100, Math.round((clickScore + impressionScore + ctrScore + positionScore) * languageBoost));
 }
 
 function keepFashionQuery(query: string): boolean {
