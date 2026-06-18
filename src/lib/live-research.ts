@@ -32,6 +32,7 @@ import {
   buildTrendName, ClassifiedQuery, DemandCluster, ShopProduct,
 } from "./query-classifier";
 import type { SearchDemandResult } from "./search-demand-engine";
+import { searchConsoleDemandSet, type SearchConsoleResult } from "./search-console";
 
 export type { Source };
 
@@ -90,6 +91,10 @@ function cachedCustomerDemandQueries(result: SearchDemandResult | null | undefin
   return new Set(queries.map((q) => q.toLowerCase().trim()).filter(Boolean));
 }
 
+function mergeDemandSets(...sets: Set<string>[]): Set<string> {
+  return new Set(sets.flatMap((set) => [...set]));
+}
+
 interface Seed { garment: string; gender: "men" | "women"; en: string; ar: string; }
 
 // Build the seed list from the catalog taxonomy: every garment Debackers
@@ -126,7 +131,7 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   const seeds = buildSeeds();
 
   // ── Fire everything in parallel ──────────────────────────────────────
-  const [autocompleteRaw, dynamicSignals, influenceSources, demandSources, products, cachedDemand] =
+  const [autocompleteRaw, dynamicSignals, influenceSources, demandSources, products, cachedDemand, cachedSearchConsole] =
     await Promise.all([
       // Real consumer search demand — autocomplete for every seed (men + women)
       Promise.all(
@@ -155,6 +160,7 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
       ]),
       getShopifyProductImages(60),
       getCachedReport<SearchDemandResult>(CACHE_KEYS.searchDemand),
+      getCachedReport<SearchConsoleResult>(CACHE_KEYS.searchConsole),
     ]);
 
   const influenceFiltered = refineSources(influenceSources);
@@ -197,7 +203,10 @@ export async function generateLiveTrends(): Promise<LiveTrendsResult> {
   const allClusters = buildDemandClusters(classified);
   const { active, backlog: backlogClusters } = applySeasonGuard(allClusters, seasonMode);
 
-  const customerDemandQueries = cachedCustomerDemandQueries(cachedDemand?.data);
+  const customerDemandQueries = mergeDemandSets(
+    cachedCustomerDemandQueries(cachedDemand?.data),
+    searchConsoleDemandSet(cachedSearchConsole?.data)
+  );
   const ctx = { products: products as ShopProduct[], articleGarments, customerDemandQueries };
   for (const c of active) scoreCluster(c, ctx);
 

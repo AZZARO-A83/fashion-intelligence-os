@@ -157,4 +157,5 @@ export const CACHE_KEYS = {
   alerts: "live:alerts:latest",
   inspiration: "live:inspiration:latest",
   searchDemand: "live:search-demand:latest",
+  searchConsole: "live:search-console:latest",
 } as const;
