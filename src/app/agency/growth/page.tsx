@@ -104,7 +104,15 @@ function groupProductsByCategory(products: Report["products"]) {
       units: rows.reduce((sum, row) => sum + row.units, 0),
       stockRisks: rows.filter((row) => row.stockRisk).length,
     }))
-    .sort((a, b) => b.revenue - a.revenue);
+    .sort((a, b) => b.units - a.units);
+}
+
+function topByUnits(rows: Report["products"]) {
+  return [...rows].sort((a, b) => b.units - a.units || b.revenue - a.revenue).slice(0, 5);
+}
+
+function slowByUnits(rows: Report["products"]) {
+  return [...rows].sort((a, b) => a.units - b.units || a.revenue - b.revenue).slice(0, 5);
 }
 
 export default function GrowthAccelerationReportPage() {
@@ -242,9 +250,10 @@ export default function GrowthAccelerationReportPage() {
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-6">
-            <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
-              <PackageCheck className="w-4 h-4 text-accent" /> Product winners by category
+            <h2 className="font-bold text-foreground flex items-center gap-2 mb-1">
+              <PackageCheck className="w-4 h-4 text-accent" /> Product movement by category
             </h2>
+            <p className="text-xs text-muted mb-4">Ranked by pieces sold, not revenue. Slow movers are the lowest unit sellers in the selected 7-day window.</p>
             <div className="space-y-3">
               {groupProductsByCategory(report.products).map((group, index) => (
                 <details key={group.category} className="bg-surface-2 border border-border rounded-xl p-4" open={index < 3}>
@@ -261,42 +270,10 @@ export default function GrowthAccelerationReportPage() {
                     </div>
                   </summary>
                   <div className="overflow-x-auto mt-4">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-muted border-b border-border">
-                          <th className="py-2 pr-3">Product family</th>
-                          <th className="py-2 pr-3">Revenue</th>
-                          <th className="py-2 pr-3">Units</th>
-                          <th className="py-2 pr-3">Change</th>
-                          <th className="py-2 pr-3">Inventory</th>
-                          <th className="py-2 pr-3">Link</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.rows.map((p) => (
-                          <tr key={p.key} className="border-b border-border/60">
-                            <td className="py-3 pr-3 text-foreground font-medium">{p.title}</td>
-                            <td className="py-3 pr-3 text-foreground">{money(p.revenue)}</td>
-                            <td className="py-3 pr-3 text-foreground">{p.units}</td>
-                            <td className={`py-3 pr-3 ${changeClass(p.revenueChange)}`}>{change(p.revenueChange)}</td>
-                            <td className="py-3 pr-3">
-                              {p.inventoryTotal === null ? (
-                                <span className="text-muted">N/A</span>
-                              ) : (
-                                <span className={p.stockRisk ? "text-red-400" : "text-green-400"}>{p.inventoryTotal} units{p.stockRisk ? " risk" : ""}</span>
-                              )}
-                            </td>
-                            <td className="py-3 pr-3">
-                              {p.url ? (
-                                <a href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1">
-                                  Open <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ) : <span className="text-muted">No link</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="grid lg:grid-cols-2 gap-5">
+                      <ProductMovementTable title="Top 5 sellers by pieces" rows={topByUnits(group.rows)} />
+                      <ProductMovementTable title="Top 5 slow movers by pieces" rows={slowByUnits(group.rows)} />
+                    </div>
                   </div>
                 </details>
               ))}
@@ -341,6 +318,50 @@ export default function GrowthAccelerationReportPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ProductMovementTable({ title, rows }: { title: string; rows: Report["products"] }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-foreground mb-2">{title}</p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-muted border-b border-border">
+            <th className="py-2 pr-3">Product family</th>
+            <th className="py-2 pr-3">Units</th>
+            <th className="py-2 pr-3">Revenue</th>
+            <th className="py-2 pr-3">Unit change</th>
+            <th className="py-2 pr-3">Inventory</th>
+            <th className="py-2 pr-3">Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => (
+            <tr key={`${title}-${p.key}`} className="border-b border-border/60">
+              <td className="py-3 pr-3 text-foreground font-medium">{p.title}</td>
+              <td className="py-3 pr-3 text-foreground font-bold">{p.units}</td>
+              <td className="py-3 pr-3 text-foreground">{money(p.revenue)}</td>
+              <td className={`py-3 pr-3 ${changeClass(p.unitChange)}`}>{change(p.unitChange)}</td>
+              <td className="py-3 pr-3">
+                {p.inventoryTotal === null ? (
+                  <span className="text-muted">N/A</span>
+                ) : (
+                  <span className={p.stockRisk ? "text-red-400" : "text-green-400"}>{p.inventoryTotal} units{p.stockRisk ? " risk" : ""}</span>
+                )}
+              </td>
+              <td className="py-3 pr-3">
+                {p.url ? (
+                  <a href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1">
+                    Open <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : <span className="text-muted">No link</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

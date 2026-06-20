@@ -484,7 +484,7 @@ export async function GET() {
         aovGrowth: pct(current.aov, previous.aov),
       },
       findings,
-      products: productComparison.slice(0, 12),
+      products: productComparison.slice(0, 80),
       channels: channelComparison.slice(0, 8),
       cities: cityComparison.slice(0, 12),
       categories: categoryComparison.slice(0, 8),
