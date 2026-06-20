@@ -113,15 +113,18 @@ function topByUnits(rows: Report["products"]) {
 
 type ProductMovementRow = Report["products"][number] & { movementSignal?: string };
 
-function slowByMovement(rows: Report["products"]): ProductMovementRow[] {
+function slowByMovement(rows: Report["products"], topRows: Report["products"]): ProductMovementRow[] {
+  const topKeys = new Set(topRows.map((row) => row.key));
   const avgUnits = rows.length ? rows.reduce((sum, row) => sum + row.units, 0) / rows.length : 0;
+  const enoughDepthForAverageFlag = rows.length >= 8;
 
   return rows
+    .filter((row) => !topKeys.has(row.key))
     .map((row) => {
       const signals = [];
       if (row.units === 0 && row.previousUnits > 0) signals.push(`No current sales; ${row.previousUnits} pieces previous period`);
       if (typeof row.unitChange === "number" && row.unitChange < 0) signals.push(`${row.unitChange}% vs previous period`);
-      if (row.units > 0 && row.units < avgUnits) signals.push(`Below category average ${avgUnits.toFixed(1)} pieces`);
+      if (enoughDepthForAverageFlag && row.units > 0 && row.units < avgUnits * 0.6) signals.push(`Below 60% of category average ${avgUnits.toFixed(1)} pieces`);
       return { ...row, movementSignal: signals.join(" | ") };
     })
     .filter((row) => row.movementSignal)
@@ -288,8 +291,15 @@ export default function GrowthAccelerationReportPage() {
                   </summary>
                   <div className="overflow-x-auto mt-4">
                     <div className="grid lg:grid-cols-2 gap-5">
-                      <ProductMovementTable title="Top 5 sellers by pieces" rows={topByUnits(group.rows)} />
-                      <ProductMovementTable title="Top 5 slow movers by real movement signal" rows={slowByMovement(group.rows)} showSignal />
+                      {(() => {
+                        const topRows = topByUnits(group.rows);
+                        return (
+                          <>
+                            <ProductMovementTable title="Top 5 sellers by pieces" rows={topRows} />
+                            <ProductMovementTable title="Top 5 slow movers by real movement signal" rows={slowByMovement(group.rows, topRows)} showSignal emptyText="No clear slow mover outside the top sellers for this category." />
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </details>
@@ -339,10 +349,13 @@ export default function GrowthAccelerationReportPage() {
   );
 }
 
-function ProductMovementTable({ title, rows, showSignal = false }: { title: string; rows: ProductMovementRow[]; showSignal?: boolean }) {
+function ProductMovementTable({ title, rows, showSignal = false, emptyText = "No products found." }: { title: string; rows: ProductMovementRow[]; showSignal?: boolean; emptyText?: string }) {
   return (
     <div>
       <p className="text-xs font-bold text-foreground mb-2">{title}</p>
+      {rows.length === 0 ? (
+        <div className="border border-border rounded-lg p-4 text-xs text-muted">{emptyText}</div>
+      ) : (
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-muted border-b border-border">
@@ -373,6 +386,7 @@ function ProductMovementTable({ title, rows, showSignal = false }: { title: stri
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
