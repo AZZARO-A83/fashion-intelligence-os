@@ -59,6 +59,7 @@ type Report = {
   cities: Array<{ name: string; orders: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   categories: Array<{ name: string; units: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   pendingOrders: Array<{ name: string; createdAt: string; financialStatus: string; fulfillmentStatus: string; total: number; city: string | null }>;
+  pendingWindow?: { from: string; to: string; label: string };
   dataLimits: string[];
   error?: string;
 };
@@ -86,6 +87,24 @@ function Confidence({ value }: { value: number }) {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short" });
+}
+
+function groupProductsByCategory(products: Report["products"]) {
+  return Object.entries(
+    products.reduce<Record<string, Report["products"]>>((acc, product) => {
+      acc[product.category] = acc[product.category] || [];
+      acc[product.category].push(product);
+      return acc;
+    }, {})
+  )
+    .map(([category, rows]) => ({
+      category,
+      rows,
+      revenue: rows.reduce((sum, row) => sum + row.revenue, 0),
+      units: rows.reduce((sum, row) => sum + row.units, 0),
+      stockRisks: rows.filter((row) => row.stockRisk).length,
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
 }
 
 export default function GrowthAccelerationReportPage() {
@@ -193,7 +212,7 @@ export default function GrowthAccelerationReportPage() {
             <div className="bg-surface border border-border rounded-xl p-5">
               <p className="text-xs text-muted mb-2">Pending/unfulfilled</p>
               <p className="text-xl font-bold text-foreground">{report.pendingOrders.length}</p>
-              <p className="text-xs text-muted mt-2">Orders needing follow-up</p>
+              <p className="text-xs text-muted mt-2">{report.pendingWindow?.label || "Last 24 hours"} needing follow-up</p>
             </div>
           </div>
 
@@ -224,47 +243,63 @@ export default function GrowthAccelerationReportPage() {
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
-              <PackageCheck className="w-4 h-4 text-accent" /> Product winners with links
+              <PackageCheck className="w-4 h-4 text-accent" /> Product winners by category
             </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted border-b border-border">
-                    <th className="py-2 pr-3">Product family</th>
-                    <th className="py-2 pr-3">Category</th>
-                    <th className="py-2 pr-3">Revenue</th>
-                    <th className="py-2 pr-3">Units</th>
-                    <th className="py-2 pr-3">Change</th>
-                    <th className="py-2 pr-3">Inventory</th>
-                    <th className="py-2 pr-3">Link</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.products.slice(0, 10).map((p) => (
-                    <tr key={p.key} className="border-b border-border/60">
-                      <td className="py-3 pr-3 text-foreground font-medium">{p.title}</td>
-                      <td className="py-3 pr-3 text-muted">{p.category}</td>
-                      <td className="py-3 pr-3 text-foreground">{money(p.revenue)}</td>
-                      <td className="py-3 pr-3 text-foreground">{p.units}</td>
-                      <td className={`py-3 pr-3 ${changeClass(p.revenueChange)}`}>{change(p.revenueChange)}</td>
-                      <td className="py-3 pr-3">
-                        {p.inventoryTotal === null ? (
-                          <span className="text-muted">N/A</span>
-                        ) : (
-                          <span className={p.stockRisk ? "text-red-400" : "text-green-400"}>{p.inventoryTotal} units{p.stockRisk ? " risk" : ""}</span>
-                        )}
-                      </td>
-                      <td className="py-3 pr-3">
-                        {p.url ? (
-                          <a href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1">
-                            Open <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : <span className="text-muted">No link</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {groupProductsByCategory(report.products).map((group, index) => (
+                <details key={group.category} className="bg-surface-2 border border-border rounded-xl p-4" open={index < 3}>
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-foreground">{group.category}</p>
+                        <p className="text-xs text-muted mt-1">
+                          {money(group.revenue)} - {group.units} units - {group.rows.length} product families
+                          {group.stockRisks ? ` - ${group.stockRisks} stock risks` : ""}
+                        </p>
+                      </div>
+                      <span className="text-xs text-accent">Open list</span>
+                    </div>
+                  </summary>
+                  <div className="overflow-x-auto mt-4">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-muted border-b border-border">
+                          <th className="py-2 pr-3">Product family</th>
+                          <th className="py-2 pr-3">Revenue</th>
+                          <th className="py-2 pr-3">Units</th>
+                          <th className="py-2 pr-3">Change</th>
+                          <th className="py-2 pr-3">Inventory</th>
+                          <th className="py-2 pr-3">Link</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.rows.map((p) => (
+                          <tr key={p.key} className="border-b border-border/60">
+                            <td className="py-3 pr-3 text-foreground font-medium">{p.title}</td>
+                            <td className="py-3 pr-3 text-foreground">{money(p.revenue)}</td>
+                            <td className="py-3 pr-3 text-foreground">{p.units}</td>
+                            <td className={`py-3 pr-3 ${changeClass(p.revenueChange)}`}>{change(p.revenueChange)}</td>
+                            <td className="py-3 pr-3">
+                              {p.inventoryTotal === null ? (
+                                <span className="text-muted">N/A</span>
+                              ) : (
+                                <span className={p.stockRisk ? "text-red-400" : "text-green-400"}>{p.inventoryTotal} units{p.stockRisk ? " risk" : ""}</span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3">
+                              {p.url ? (
+                                <a href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1">
+                                  Open <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : <span className="text-muted">No link</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ))}
             </div>
           </div>
 
@@ -277,7 +312,7 @@ export default function GrowthAccelerationReportPage() {
           {report.pendingOrders.length > 0 && (
             <div className="bg-surface border border-border rounded-xl p-6">
               <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
-                <Truck className="w-4 h-4 text-accent" /> Pending/unfulfilled orders to recover
+                <Truck className="w-4 h-4 text-accent" /> Pending/unfulfilled orders to recover - last rolling 24 hours
               </h2>
               <div className="grid gap-2">
                 {report.pendingOrders.map((order) => (

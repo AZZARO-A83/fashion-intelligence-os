@@ -214,6 +214,38 @@ function channelName(order: Order) {
   return order.source_name || "Unknown";
 }
 
+function normalizeCityName(city?: string, province?: string) {
+  const raw = `${city || ""} ${province || ""}`.trim();
+  if (!raw) return "Unknown city";
+
+  const normalized = raw
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (
+    /\bcairo\b|\bnew cairo\b|\bc, cairo\b/.test(normalized) ||
+    /القاهره|التجمع|التجمع الخامس|مدينتي|مدينه نصر|مصر الجديده|المعادي|الرحاب|الشروق|بدر|القطاميه/.test(normalized)
+  ) {
+    return "Cairo";
+  }
+
+  if (/\bgiza\b|\bagouza\b|\bdokki\b|\bmohandessin\b|\bharam\b|\bfaisal\b|الجيزه|الدقي|المهندسين|العجوزه|الهرم|فيصل/.test(normalized)) {
+    return "Giza";
+  }
+
+  if (/\balexandria\b|الاسكندريه|اسكندريه/.test(normalized)) return "Alexandria";
+  if (/\bsharqia\b|الشرقيه|فاقوس|ديرب نجم|بلبيس|ابو كبير/.test(normalized)) return "Al Sharqia";
+  if (/\bmansoura\b|\bdakahlia\b|الدقهليه|المنصوره/.test(normalized)) return "Dakahlia";
+  if (/\btanta\b|\bgharbia\b|الغربيه|طنطا/.test(normalized)) return "Gharbia";
+  if (/\bminya\b|المنيا/.test(normalized)) return "Minya";
+  if (/\bassiut\b|\basyut\b|اسيوط/.test(normalized)) return "Assiut";
+
+  return city?.trim() || province?.trim() || "Unknown city";
+}
+
 function buildBreakdown(orders: Order[], products: Map<number, ProductInfo>) {
   const productsMap = new Map<string, any>();
   const categories = new Map<string, any>();
@@ -226,9 +258,7 @@ function buildBreakdown(orders: Order[], products: Map<number, ProductInfo>) {
     channels.get(channel).orders += 1;
     channels.get(channel).revenue += Number(order.total_price || 0);
 
-    const city = order.shipping_address?.city?.trim() || "Unknown city";
-    const province = order.shipping_address?.province?.trim() || "";
-    const cityKey = province ? `${city}, ${province}` : city;
+    const cityKey = normalizeCityName(order.shipping_address?.city, order.shipping_address?.province);
     if (!cities.has(cityKey)) cities.set(cityKey, { name: cityKey, orders: 0, revenue: 0 });
     cities.get(cityKey).orders += 1;
     cities.get(cityKey).revenue += Number(order.total_price || 0);
@@ -295,7 +325,7 @@ function compareRows(current: any[], previous: any[], key = "name") {
   }));
 }
 
-function buildFindings(current: any, previous: any, currentBreakdown: any, previousBreakdown: any, pending: Order[]) {
+function buildFindings(current: any, previous: any, currentBreakdown: any, previousBreakdown: any, pending24h: Order[]) {
   const findings = [];
   const aovGrowth = pct(current.aov, previous.aov);
   const orderGrowth = pct(current.orders, previous.orders);
@@ -360,11 +390,11 @@ function buildFindings(current: any, previous: any, currentBreakdown: any, previ
     });
   }
 
-  if (pending.length) {
+  if (pending24h.length) {
     findings.push({
       type: "operations",
-      title: `${pending.length} pending/unfulfilled orders need follow-up`,
-      evidence: pending.slice(0, 5).map((o) => `${o.name} (${o.financial_status}, ${o.fulfillment_status || "unfulfilled"})`).join(", "),
+      title: `${pending24h.length} pending/unfulfilled orders from the last 24 hours need follow-up`,
+      evidence: pending24h.slice(0, 5).map((o) => `${o.name} (${o.financial_status}, ${o.fulfillment_status || "unfulfilled"})`).join(", "),
       action: "Follow up manually or through Flow/Cartsaver before treating this as lost demand.",
       confidence: 85,
     });
@@ -399,7 +429,9 @@ export async function GET() {
     const previous = periodStats(previousOrders);
     const currentBreakdown = buildBreakdown(currentOrders, products);
     const previousBreakdown = buildBreakdown(previousOrders, products);
-    const pending = currentOrders.filter((o) =>
+    const last24Start = currentEnd - 24 * 60 * 60 * 1000;
+    const pending24h = orders.filter((o) =>
+      inRange(o, last24Start, currentEnd) &&
       o.fulfillment_status !== "fulfilled" &&
       ["pending", "authorized", "partially_paid"].includes(o.financial_status)
     );
@@ -408,7 +440,7 @@ export async function GET() {
     const channelComparison = compareRows(currentBreakdown.channels, previousBreakdown.channels);
     const cityComparison = compareRows(currentBreakdown.cities, previousBreakdown.cities);
     const categoryComparison = compareRows(currentBreakdown.categories, previousBreakdown.categories);
-    const findings = buildFindings(current, previous, currentBreakdown, previousBreakdown, pending);
+    const findings = buildFindings(current, previous, currentBreakdown, previousBreakdown, pending24h);
 
     return NextResponse.json({
       isLive: true,
@@ -430,13 +462,14 @@ export async function GET() {
       channels: channelComparison.slice(0, 8),
       cities: cityComparison.slice(0, 12),
       categories: categoryComparison.slice(0, 8),
-      pendingOrders: pending.slice(0, 10).map((o) => ({
+      pendingWindow: { from: new Date(last24Start).toISOString(), to: new Date(currentEnd).toISOString(), label: "Last rolling 24 hours" },
+      pendingOrders: pending24h.slice(0, 10).map((o) => ({
         name: o.name,
         createdAt: o.created_at,
         financialStatus: o.financial_status,
         fulfillmentStatus: o.fulfillment_status || "unfulfilled",
         total: Number(o.total_price || 0),
-        city: o.shipping_address?.city || null,
+        city: normalizeCityName(o.shipping_address?.city, o.shipping_address?.province),
       })),
       dataLimits: [
         "New vs returning customer revenue requires longer customer order history than this 14-day diagnostic fetch.",
