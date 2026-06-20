@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Briefcase, FlameKindling, CalendarRange, LineChart, ArrowRight, Info } from "lucide-react";
+import { Briefcase, FlameKindling, CalendarRange, LineChart, ArrowRight, Info, TrendingUp } from "lucide-react";
 import { HelpButton } from "@/components/ui/help-button";
 
 const reports = [
@@ -26,6 +26,17 @@ const reports = [
     badgeColor: "bg-blue-500/20 text-blue-400",
     iconColor: "text-blue-400",
     audience: ["Management", "Marketing Team"],
+  },
+  {
+    href: "/agency/growth",
+    icon: TrendingUp,
+    title: "Growth Acceleration",
+    subtitle: "Shopify signal report",
+    description: "AOV drivers, premium product winners, Cartsaver CoD impact, stock risk, and a 48-hour action plan.",
+    badge: "GROWTH",
+    badgeColor: "bg-green-500/20 text-green-400",
+    iconColor: "text-green-400",
+    audience: ["Management", "Marketing Team", "Merchandising"],
   },
   {
     href: "/agency/monthly",

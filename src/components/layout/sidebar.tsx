@@ -40,6 +40,7 @@ const SECTIONS = [
     subs: [
       { href: "/agency/flash", label: "Flash Brief (3-day)" },
       { href: "/agency/weekly", label: "Weekly report" },
+      { href: "/agency/growth", label: "Growth acceleration" },
       { href: "/agency/monthly", label: "Monthly strategy" },
       { href: "/monthly-plan", label: "Monthly plan" },
       { href: "/calendar", label: "Event calendar" },
