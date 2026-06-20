@@ -108,11 +108,29 @@ function groupProductsByCategory(products: Report["products"]) {
 }
 
 function topByUnits(rows: Report["products"]) {
-  return [...rows].sort((a, b) => b.units - a.units || b.revenue - a.revenue).slice(0, 5);
+  return [...rows].filter((row) => row.units > 0).sort((a, b) => b.units - a.units || b.revenue - a.revenue).slice(0, 5);
 }
 
-function slowByUnits(rows: Report["products"]) {
-  return [...rows].sort((a, b) => a.units - b.units || a.revenue - b.revenue).slice(0, 5);
+type ProductMovementRow = Report["products"][number] & { movementSignal?: string };
+
+function slowByMovement(rows: Report["products"]): ProductMovementRow[] {
+  const avgUnits = rows.length ? rows.reduce((sum, row) => sum + row.units, 0) / rows.length : 0;
+
+  return rows
+    .map((row) => {
+      const signals = [];
+      if (row.units === 0 && row.previousUnits > 0) signals.push(`No current sales; ${row.previousUnits} pieces previous period`);
+      if (typeof row.unitChange === "number" && row.unitChange < 0) signals.push(`${row.unitChange}% vs previous period`);
+      if (row.units > 0 && row.units < avgUnits) signals.push(`Below category average ${avgUnits.toFixed(1)} pieces`);
+      return { ...row, movementSignal: signals.join(" | ") };
+    })
+    .filter((row) => row.movementSignal)
+    .sort((a, b) => {
+      if (a.units === 0 && b.units !== 0) return -1;
+      if (b.units === 0 && a.units !== 0) return 1;
+      return a.units - b.units || (a.unitChange ?? 0) - (b.unitChange ?? 0) || a.revenue - b.revenue;
+    })
+    .slice(0, 5);
 }
 
 export default function GrowthAccelerationReportPage() {
@@ -253,7 +271,7 @@ export default function GrowthAccelerationReportPage() {
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-1">
               <PackageCheck className="w-4 h-4 text-accent" /> Product movement by category
             </h2>
-            <p className="text-xs text-muted mb-4">Ranked by pieces sold, not revenue. Slow movers are the lowest unit sellers in the selected 7-day window.</p>
+            <p className="text-xs text-muted mb-4">Ranked from live Shopify line-item quantities. Slow movers are products below their category average, down vs the previous 7 days, or sold before but not in the current period.</p>
             <div className="space-y-3">
               {groupProductsByCategory(report.products).map((group, index) => (
                 <details key={group.category} className="bg-surface-2 border border-border rounded-xl p-4" open={index < 3}>
@@ -271,7 +289,7 @@ export default function GrowthAccelerationReportPage() {
                   <div className="overflow-x-auto mt-4">
                     <div className="grid lg:grid-cols-2 gap-5">
                       <ProductMovementTable title="Top 5 sellers by pieces" rows={topByUnits(group.rows)} />
-                      <ProductMovementTable title="Top 5 slow movers by pieces" rows={slowByUnits(group.rows)} />
+                      <ProductMovementTable title="Top 5 slow movers by real movement signal" rows={slowByMovement(group.rows)} showSignal />
                     </div>
                   </div>
                 </details>
@@ -321,7 +339,7 @@ export default function GrowthAccelerationReportPage() {
   );
 }
 
-function ProductMovementTable({ title, rows }: { title: string; rows: Report["products"] }) {
+function ProductMovementTable({ title, rows, showSignal = false }: { title: string; rows: ProductMovementRow[]; showSignal?: boolean }) {
   return (
     <div>
       <p className="text-xs font-bold text-foreground mb-2">{title}</p>
@@ -332,6 +350,7 @@ function ProductMovementTable({ title, rows }: { title: string; rows: Report["pr
             <th className="py-2 pr-3">Units</th>
             <th className="py-2 pr-3">Revenue</th>
             <th className="py-2 pr-3">Unit change</th>
+            {showSignal && <th className="py-2 pr-3">Why flagged</th>}
             <th className="py-2 pr-3">Link</th>
           </tr>
         </thead>
@@ -342,6 +361,7 @@ function ProductMovementTable({ title, rows }: { title: string; rows: Report["pr
               <td className="py-3 pr-3 text-foreground font-bold">{p.units}</td>
               <td className="py-3 pr-3 text-foreground">{money(p.revenue)}</td>
               <td className={`py-3 pr-3 ${changeClass(p.unitChange)}`}>{change(p.unitChange)}</td>
+              {showSignal && <td className="py-3 pr-3 text-muted text-xs">{p.movementSignal}</td>}
               <td className="py-3 pr-3">
                 {p.url ? (
                   <a href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1">

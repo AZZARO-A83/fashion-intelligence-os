@@ -313,9 +313,10 @@ function buildBreakdown(orders: Order[], products: Map<number, ProductInfo>) {
   };
 }
 
-function compareRows(current: any[], previous: any[], key = "name") {
+function compareRows(current: any[], previous: any[], key = "name", includePreviousOnly = false) {
   const prev = new Map(previous.map((row) => [row[key], row]));
-  return current.map((row) => ({
+  const currentKeys = new Set(current.map((row) => row[key]));
+  const currentRows = current.map((row) => ({
     ...row,
     previousRevenue: prev.get(row[key])?.revenue ?? 0,
     previousUnits: prev.get(row[key])?.units ?? 0,
@@ -323,6 +324,24 @@ function compareRows(current: any[], previous: any[], key = "name") {
     unitChange: pct(row.units ?? row.orders ?? 0, prev.get(row[key])?.units ?? prev.get(row[key])?.orders ?? 0),
     isNew: !prev.has(row[key]),
   }));
+
+  if (!includePreviousOnly) return currentRows;
+
+  const previousOnlyRows = previous
+    .filter((row) => !currentKeys.has(row[key]))
+    .map((row) => ({
+      ...row,
+      revenue: 0,
+      units: 0,
+      orders: 0,
+      previousRevenue: row.revenue ?? 0,
+      previousUnits: row.units ?? row.orders ?? 0,
+      revenueChange: pct(0, row.revenue ?? 0),
+      unitChange: pct(0, row.units ?? row.orders ?? 0),
+      isNew: false,
+    }));
+
+  return [...currentRows, ...previousOnlyRows];
 }
 
 function buildFindings(current: any, previous: any, currentBreakdown: any, previousBreakdown: any, pending24h: Order[]) {
@@ -462,7 +481,7 @@ export async function GET() {
       ["pending", "authorized", "partially_paid"].includes(o.financial_status)
     );
 
-    const productComparison = compareRows(currentBreakdown.products, previousBreakdown.products, "key");
+    const productComparison = compareRows(currentBreakdown.products, previousBreakdown.products, "key", true);
     const channelComparison = compareRows(currentBreakdown.channels, previousBreakdown.channels);
     const cityComparison = compareRows(currentBreakdown.cities, previousBreakdown.cities);
     const categoryComparison = compareRows(currentBreakdown.categories, previousBreakdown.categories);
