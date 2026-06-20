@@ -329,74 +329,100 @@ function buildFindings(current: any, previous: any, currentBreakdown: any, previ
   const findings = [];
   const aovGrowth = pct(current.aov, previous.aov);
   const orderGrowth = pct(current.orders, previous.orders);
-  const topProduct = currentBreakdown.products[0];
-  const topChannel = compareRows(currentBreakdown.channels, previousBreakdown.channels)[0];
-  const topCity = compareRows(currentBreakdown.cities, previousBreakdown.cities)[0];
+  const revenueGrowth = pct(current.netSales, previous.netSales);
+  const productRows = compareRows(currentBreakdown.products, previousBreakdown.products, "key");
+  const channelRows = compareRows(currentBreakdown.channels, previousBreakdown.channels);
+  const cityRows = compareRows(currentBreakdown.cities, previousBreakdown.cities);
+  const categoryRows = compareRows(currentBreakdown.categories, previousBreakdown.categories);
+  const topProduct = productRows[0];
+  const secondProduct = productRows[1];
+  const topCategory = categoryRows[0];
+  const topChannel = channelRows[0];
+  const topCity = cityRows[0];
+  const pendingValue = pending24h.reduce((sum, order) => sum + Number(order.total_price || 0), 0);
+  const revenue = Math.max(current.netSales, 1);
+  const topProductShare = topProduct ? Math.round((topProduct.revenue / revenue) * 1000) / 10 : 0;
+  const topCategoryShare = topCategory ? Math.round((topCategory.revenue / revenue) * 1000) / 10 : 0;
+  const topChannelShare = topChannel ? Math.round((topChannel.revenue / revenue) * 1000) / 10 : 0;
+  const topCityShare = topCity ? Math.round((topCity.revenue / revenue) * 1000) / 10 : 0;
+  const stockRiskProducts = productRows.filter((p) => p.stockRisk).slice(0, 3);
 
-  if ((aovGrowth ?? 0) > 10 && (orderGrowth ?? 0) < 0) {
+  findings.push({
+    type: "executive-thesis",
+    title:
+      (revenueGrowth ?? 0) >= 0
+        ? `Growth thesis: ${current.orders} orders are producing EGP ${current.netSales.toLocaleString("en-EG")} because volume and/or basket quality are holding`
+        : `Downturn thesis: revenue is down ${revenueGrowth}% because the current 7-day base is not matching the previous period`,
+    evidence: `Revenue changed ${revenueGrowth === null ? "with no baseline" : `${revenueGrowth}%`}; orders changed ${orderGrowth === null ? "with no baseline" : `${orderGrowth}%`}; AOV changed ${aovGrowth === null ? "with no baseline" : `${aovGrowth}%`} from EGP ${previous.aov.toLocaleString("en-EG")} to EGP ${current.aov.toLocaleString("en-EG")}.`,
+    action:
+      (aovGrowth ?? 0) >= 0
+        ? "Do not start with blanket discounts. Scale the winning product/category/channel combination and use bundles to increase units per order while protecting AOV."
+        : "Do not scale spend until basket quality is fixed. Audit discounts, low-price product mix, and cart composition first.",
+    confidence: current.orders >= 50 ? 92 : current.orders >= 20 ? 84 : 72,
+  });
+
+  if (topProduct && topCategory) {
     findings.push({
-      type: "growth-driver",
-      title: "AOV is carrying revenue while order volume is weaker",
-      evidence: `AOV changed ${aovGrowth}% while orders changed ${orderGrowth}%. This means the current performance is product-mix/basket-value driven, not demand-volume driven.`,
-      action: "Protect premium product visibility and use bundles that increase units per order without deep discounting.",
+      type: "product-strategy",
+      title: `Product engine: ${topCategory.name} is the commercial lane, led by ${topProduct.title}`,
+      evidence: `${topCategory.name} generated EGP ${topCategory.revenue.toLocaleString("en-EG")} (${topCategoryShare}% of revenue). ${topProduct.title} alone generated EGP ${topProduct.revenue.toLocaleString("en-EG")} from ${topProduct.units} units (${topProductShare}% of revenue). ${secondProduct ? `Second product: ${secondProduct.title}, EGP ${secondProduct.revenue.toLocaleString("en-EG")}.` : ""}`,
+      action: `Build the next 48-hour push around this lane: hero ${topProduct.title}, cross-sell the next strongest ${topCategory.name} product, and keep weaker categories out of paid traffic until they prove demand.`,
       confidence: 90,
-    });
-  } else if ((orderGrowth ?? 0) < 0) {
-    findings.push({
-      type: "downturn",
-      title: "Demand volume is the main pressure point",
-      evidence: `Orders changed ${orderGrowth}% vs the previous equal period.`,
-      action: "Use retargeting, WhatsApp recovery, and region/category-specific reactivation before changing fulfillment operations.",
-      confidence: 86,
-    });
-  } else {
-    findings.push({
-      type: "growth-driver",
-      title: "Order volume is supporting the period",
-      evidence: `Orders are ${current.orders}, with ${orderGrowth === null ? "no previous baseline" : `${orderGrowth}% change`} vs the previous equal period.`,
-      action: "Scale only the product/channel combinations that are already converting.",
-      confidence: 80,
+      productUrl: topProduct.url,
     });
   }
 
-  if (topProduct) {
+  if (topProduct && topProductShare >= 20) {
     findings.push({
-      type: "product",
-      title: `${topProduct.category} winner: ${topProduct.title}`,
-      evidence: `${topProduct.units} units, EGP ${topProduct.revenue.toLocaleString("en-EG")} revenue, ${topProduct.variants} variants grouped.`,
-      action: topProduct.url ? "Feature this product in homepage, best sellers, ads, and retargeting creatives." : "Feature this product in homepage, best sellers, ads, and retargeting creatives. Product URL missing from Shopify product map.",
-      confidence: 88,
+      type: "concentration-risk",
+      title: `Concentration risk: one product family is carrying ${topProductShare}% of revenue`,
+      evidence: `${topProduct.title} is strong, but over-dependence creates a stockout and creative-fatigue risk. Inventory shown: ${topProduct.inventoryTotal ?? "N/A"} units. Revenue change: ${topProduct.revenueChange === null ? "new/no baseline" : `${topProduct.revenueChange}%`}.`,
+      action: "Keep it as the hero, but pair it with 2 backup products in the same category. If inventory is low, reduce cold traffic and shift to retargeting or alternatives.",
+      confidence: 86,
       productUrl: topProduct.url,
     });
   }
 
   if (topChannel) {
     findings.push({
-      type: "channel",
-      title: `Channel signal: ${topChannel.name}`,
-      evidence: `${topChannel.orders} orders, EGP ${topChannel.revenue.toLocaleString("en-EG")} revenue${topChannel.isNew ? ", new vs previous period" : ""}.`,
-      action: topChannel.isNew ? "Audit and scale carefully; check message timing, CoD clarity, and recovery copy." : "Keep budget and CRM effort tied to this channel if conversion quality holds.",
-      confidence: topChannel.name === "Unknown" ? 55 : 78,
+      type: "channel-strategy",
+      title: `Channel lever: ${topChannel.name} is responsible for ${topChannelShare}% of revenue`,
+      evidence: `${topChannel.name} produced ${topChannel.orders} orders and EGP ${topChannel.revenue.toLocaleString("en-EG")} revenue. ${topChannel.isNew ? "It is new vs the previous period." : `Revenue changed ${topChannel.revenueChange === null ? "with no baseline" : `${topChannel.revenueChange}%`}.`}`,
+      action:
+        /cash|cod|cartsaver/i.test(topChannel.name)
+          ? "Treat this as a conversion/recovery channel: improve WhatsApp/OTP copy, call out COD clarity, and follow up pending orders within 30-60 minutes."
+          : "Scale this channel only with the winning product/category creative. Do not spread budget across weak product types.",
+      confidence: topChannel.name === "Unknown" ? 58 : 82,
     });
   }
 
   if (topCity && topCity.name !== "Unknown city") {
     findings.push({
-      type: "geo",
-      title: `Top delivery geography: ${topCity.name}`,
-      evidence: `${topCity.orders} orders, EGP ${topCity.revenue.toLocaleString("en-EG")} revenue.`,
-      action: "Use this city/region for localized creatives, delivery promise, and retargeting segments.",
-      confidence: 75,
+      type: "geo-strategy",
+      title: `Geo play: ${topCity.name} is the current scale market, not just another city`,
+      evidence: `${topCity.name} generated ${topCity.orders} orders and EGP ${topCity.revenue.toLocaleString("en-EG")} revenue (${topCityShare}% of revenue). City variants are normalized, so New Cairo/Arabic Cairo areas are counted under Cairo.`,
+      action: "Run a city-specific angle: fast delivery promise, COD trust, and best-selling category creatives. Keep other cities visible, but use Cairo as the scaling base until another city shows comparable order depth.",
+      confidence: 82,
+    });
+  }
+
+  if (stockRiskProducts.length) {
+    findings.push({
+      type: "inventory-risk",
+      title: `${stockRiskProducts.length} winner products have stock-risk flags`,
+      evidence: stockRiskProducts.map((p) => `${p.title}: ${p.inventoryTotal} inventory vs ${p.units} units sold`).join("; "),
+      action: "Before increasing spend, confirm size-level stock. If key sizes are thin, switch the hero product or cap campaign budget to avoid wasted traffic.",
+      confidence: 84,
     });
   }
 
   if (pending24h.length) {
     findings.push({
-      type: "operations",
-      title: `${pending24h.length} pending/unfulfilled orders from the last 24 hours need follow-up`,
-      evidence: pending24h.slice(0, 5).map((o) => `${o.name} (${o.financial_status}, ${o.fulfillment_status || "unfulfilled"})`).join(", "),
-      action: "Follow up manually or through Flow/Cartsaver before treating this as lost demand.",
-      confidence: 85,
+      type: "leakage-recovery",
+      title: `Revenue leakage: ${pending24h.length} pending/unfulfilled orders worth about EGP ${money(pendingValue).toLocaleString("en-EG")} appeared in the last 24 hours`,
+      evidence: pending24h.slice(0, 6).map((o) => `${o.name} (${o.financial_status}, ${o.fulfillment_status || "unfulfilled"})`).join(", "),
+      action: "This is the fastest money to recover. Create a 24-hour operating rule: contact pending COD/OTP orders within 30 minutes, then again after 2 hours, then mark reason if not recovered.",
+      confidence: 88,
     });
   }
 
