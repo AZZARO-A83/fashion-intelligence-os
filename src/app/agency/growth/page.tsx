@@ -89,6 +89,13 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short" });
 }
 
+const growthMetricExplanations: Record<string, string> = {
+  "Net sales": "Main money signal from Shopify orders in this report window.",
+  Orders: "Demand volume. If orders fall, demand or conversion is the problem.",
+  AOV: "Average order value. Shows whether customers are buying higher-ticket baskets.",
+  "Pending/unfulfilled": "Orders from the last rolling 24 hours that still need recovery or follow-up.",
+};
+
 function groupProductsByCategory(products: Report["products"]) {
   return Object.entries(
     products.reduce<Record<string, Report["products"]>>((acc, product) => {
@@ -227,21 +234,25 @@ export default function GrowthAccelerationReportPage() {
               <p className="text-xs text-muted mb-2">Net sales</p>
               <p className="text-xl font-bold text-accent">{money(report.summary.current.netSales)}</p>
               <p className={`text-xs mt-2 ${changeClass(report.summary.revenueGrowth)}`}>{change(report.summary.revenueGrowth)} vs previous</p>
+              <p className="text-[11px] text-foreground-muted mt-2 leading-relaxed">{growthMetricExplanations["Net sales"]}</p>
             </div>
             <div className="bg-surface border border-border rounded-xl p-5">
               <p className="text-xs text-muted mb-2">Orders</p>
               <p className="text-xl font-bold text-foreground">{report.summary.current.orders.toLocaleString("en-EG")}</p>
               <p className={`text-xs mt-2 ${changeClass(report.summary.ordersGrowth)}`}>{change(report.summary.ordersGrowth)} vs previous</p>
+              <p className="text-[11px] text-foreground-muted mt-2 leading-relaxed">{growthMetricExplanations.Orders}</p>
             </div>
             <div className="bg-surface border border-border rounded-xl p-5">
               <p className="text-xs text-muted mb-2">AOV</p>
               <p className="text-xl font-bold text-foreground">{money(report.summary.current.aov)}</p>
               <p className={`text-xs mt-2 ${changeClass(report.summary.aovGrowth)}`}>{change(report.summary.aovGrowth)} vs previous</p>
+              <p className="text-[11px] text-foreground-muted mt-2 leading-relaxed">{growthMetricExplanations.AOV}</p>
             </div>
             <div className="bg-surface border border-border rounded-xl p-5">
               <p className="text-xs text-muted mb-2">Pending/unfulfilled</p>
               <p className="text-xl font-bold text-foreground">{report.pendingOrders.length}</p>
               <p className="text-xs text-muted mt-2">{report.pendingWindow?.label || "Last 24 hours"} needing follow-up</p>
+              <p className="text-[11px] text-foreground-muted mt-2 leading-relaxed">{growthMetricExplanations["Pending/unfulfilled"]}</p>
             </div>
           </div>
 

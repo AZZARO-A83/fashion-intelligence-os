@@ -8,12 +8,25 @@ interface StatCardProps {
   change?: number;
   icon?: ReactNode;
   sub?: string;
+  explain?: string;
   accent?: boolean;
 }
 
-export function StatCard({ label, value, change, icon, sub, accent }: StatCardProps) {
+const DEFAULT_EXPLANATIONS: Record<string, string> = {
+  "Net Sales": "Main sales health number: paid order value after discounts and returns.",
+  "Total Orders": "Demand volume: how many orders were placed in the selected period.",
+  "Avg Order Value": "Basket quality: average money per order. Higher AOV can offset fewer orders.",
+  "Repeat Buyers": "Retention signal: customers who came back and bought again.",
+  "Abandoned Carts": "Checkout demand that did not convert. Use this to size recovery work.",
+  "Recovery Opportunity": "Estimated recoverable revenue from abandoned cart value.",
+  "Growth vs prev period": "Net sales change against the same-length previous period.",
+  "Orders growth": "Order volume change against the same-length previous period.",
+};
+
+export function StatCard({ label, value, change, icon, sub, explain, accent }: StatCardProps) {
   const isPositive = (change ?? 0) > 0;
   const isNeutral = change === undefined || change === 0;
+  const explanation = explain || DEFAULT_EXPLANATIONS[label];
 
   return (
     <div
@@ -38,6 +51,7 @@ export function StatCard({ label, value, change, icon, sub, accent }: StatCardPr
           {value}
         </p>
         {sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}
+        {explanation && <p className="text-[11px] text-foreground-muted mt-2 leading-relaxed">{explanation}</p>}
       </div>
 
       {!isNeutral && (

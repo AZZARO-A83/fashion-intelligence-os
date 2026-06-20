@@ -19,34 +19,43 @@ const SECTIONS = [
   {
     href: "/", label: "Overview", icon: LayoutDashboard,
     subs: [
-      { href: "/sales", label: "Sales detail" },
-      { href: "/analytics", label: "Analytics" },
+      { href: "/sales", label: "Sales detail", group: "Store performance" },
+      { href: "/analytics", label: "Analytics", group: "Store performance" },
     ],
   },
   {
     href: "/trends", label: "Trends", icon: TrendingUp,
-    subs: [{ href: "/trends/alerts", label: "Urgent alerts" }],
+    subs: [{ href: "/trends/alerts", label: "Urgent alerts", group: "Market signals" }],
   },
   { href: "/competitors", label: "Competitors", icon: Users, subs: [] },
   {
     href: "/content", label: "Create", icon: PenTool,
     subs: [
-      { href: "/campaigns", label: "Campaigns" },
-      { href: "/inspiration", label: "Inspiration" },
+      { href: "/campaigns", label: "Campaigns", group: "Creative work" },
+      { href: "/inspiration", label: "Inspiration", group: "Creative work" },
     ],
   },
   {
     href: "/agency", label: "Reports", icon: Briefcase,
     subs: [
-      { href: "/agency/flash", label: "Flash Brief (3-day)" },
-      { href: "/agency/weekly", label: "Weekly report" },
-      { href: "/agency/growth", label: "Growth acceleration" },
-      { href: "/agency/monthly", label: "Monthly strategy" },
-      { href: "/monthly-plan", label: "Monthly plan" },
-      { href: "/calendar", label: "Event calendar" },
+      { href: "/agency/flash", label: "Flash Brief (3-day)", group: "Operating reports" },
+      { href: "/agency/weekly", label: "Weekly report", group: "Operating reports" },
+      { href: "/agency/growth", label: "Growth acceleration", group: "Operating reports" },
+      { href: "/agency/monthly", label: "Monthly strategy", group: "Planning" },
+      { href: "/monthly-plan", label: "Monthly plan", group: "Planning" },
+      { href: "/calendar", label: "Event calendar", group: "Planning" },
     ],
   },
 ];
+
+function groupedSubs(subs: (typeof SECTIONS)[number]["subs"]) {
+  return subs.reduce<Record<string, typeof subs>>((acc, sub) => {
+    const group = sub.group || "General";
+    acc[group] = acc[group] || [];
+    acc[group].push(sub);
+    return acc;
+  }, {});
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -100,21 +109,26 @@ export function Sidebar() {
               </Link>
               {open && s.subs.length > 0 && (
                 <div className="ml-6 mt-1 mb-1 space-y-0.5 border-l border-border pl-3">
-                  {s.subs.map((sub) => {
-                    const subActive = pathname === sub.href;
-                    return (
-                      <Link
-                        key={sub.href}
-                        href={sub.href}
-                        className={cn(
-                          "block px-2 py-1.5 rounded-md text-xs transition-colors",
-                          subActive ? "text-accent font-medium" : "text-muted hover:text-foreground"
-                        )}
-                      >
-                        {sub.label}
-                      </Link>
-                    );
-                  })}
+                  {Object.entries(groupedSubs(s.subs)).map(([group, subs]) => (
+                    <div key={group} className="pt-1">
+                      <p className="px-2 pb-1 text-[10px] uppercase tracking-wider text-muted">{group}</p>
+                      {subs.map((sub) => {
+                        const subActive = pathname === sub.href;
+                        return (
+                          <Link
+                            key={sub.href}
+                            href={sub.href}
+                            className={cn(
+                              "block px-2 py-1.5 rounded-md text-xs transition-colors",
+                              subActive ? "text-accent font-medium" : "text-muted hover:text-foreground"
+                            )}
+                          >
+                            {sub.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
