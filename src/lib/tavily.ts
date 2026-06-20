@@ -301,10 +301,10 @@ export async function searchEgyptianFashionTrends(): Promise<string> {
   return `
 LIVE TREND SEARCH RESULTS (searched today):
 
-=== TikTok Egypt Fashion Trends ===
+=== Egypt Fashion Search Results ===
 ${formatResults(searches[0].results)}
 
-=== Instagram Egypt Trending ===
+=== Cairo and Sahel Style Search Results ===
 ${formatResults(searches[1].results)}
 
 === Egyptian Fashion Market News ===

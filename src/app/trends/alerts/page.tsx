@@ -315,7 +315,7 @@ export default function TrendAlertsPage() {
           <p className="text-xs font-semibold text-foreground mb-3">🔄 How Trend Monitoring Works</p>
           <div className="grid grid-cols-4 gap-3">
             {[
-              { step: "1", label: "Weekly scan", desc: "Runs every 7 days automatically. Searches TikTok, Instagram, Google Trends for Egypt" },
+              { step: "1", label: "Weekly scan", desc: "Uses Serper Google results, autocomplete demand, and publisher feeds for Egypt" },
               { step: "2", label: "Score change", desc: "If a trend score jumps 6+ points or growth rate exceeds 25%, an alert fires" },
               { step: "3", label: "Alert created", desc: "New alert added with source, signals, and suggested action — existing plans untouched" },
               { step: "4", label: "You decide", desc: "Review, action (add to next campaign), or dismiss. Nothing changes automatically" },

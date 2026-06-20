@@ -155,7 +155,7 @@ export default function FlashBriefPage() {
           <div className="flex items-center justify-center gap-4 text-sm">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${step === "searching" ? "bg-accent/20 text-accent" : "bg-green-500/20 text-green-400"}`}>
               {step === "searching" ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>✓</span>}
-              TikTok trends Egypt
+              Egypt fashion search
             </div>
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${step === "searching" ? "bg-accent/20 text-accent" : step === "generating" ? "bg-green-500/20 text-green-400" : "bg-surface-2 text-muted"}`}>
               {step === "searching" ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : step !== "idle" ? <span>✓</span> : null}

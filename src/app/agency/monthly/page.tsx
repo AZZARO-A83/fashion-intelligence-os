@@ -117,7 +117,7 @@ export default function MonthlyStrategyPage() {
             </p>
           </div>
           <p className="text-sm text-muted">
-            {step === "searching" ? "Scanning trends, competitors, influencers, market data..." : "Deep market analysis in progress..."}
+            {step === "searching" ? "Scanning trends, competitors, publisher sources, and market data..." : "Deep market analysis in progress..."}
           </p>
         </div>
       )}

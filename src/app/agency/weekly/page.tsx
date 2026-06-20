@@ -117,7 +117,7 @@ export default function WeeklyReportPage() {
             </p>
           </div>
           <p className="text-sm text-muted">
-            {step === "searching" ? "Scanning TikTok trends, competitor pages, influencers..." : "AI analyzing research and generating strategy..."}
+            {step === "searching" ? "Scanning Egypt fashion search results, competitor pages, and publisher sources..." : "AI analyzing research and generating strategy..."}
           </p>
         </div>
       )}
