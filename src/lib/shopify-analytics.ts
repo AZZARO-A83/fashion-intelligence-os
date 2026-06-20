@@ -201,7 +201,7 @@ export async function getShopifyReport() {
       totalRevenue,
       totalOrders,
       avgOrderValue,
-      conversionRate: conversionRate || 0.74,
+      conversionRate,
       weeklyGrowth,
       repeatPurchaseRate: repeatPurchaseRate || 33.36,
       abandonedCarts: abandonedCount,

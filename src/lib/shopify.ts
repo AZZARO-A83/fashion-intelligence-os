@@ -1,4 +1,5 @@
 import { SalesData, TopProduct } from "@/types";
+import { fetchGa4ConversionMetrics } from "./ga4";
 
 const SHOPIFY_URL = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -447,6 +448,7 @@ function zeroSales(
 ): SalesData & { isLive: boolean; dataError?: string; rangeFrom: string; rangeTo: string } {
   return {
     totalRevenue: 0, totalOrders: 0, avgOrderValue: 0, conversionRate: 0,
+    conversionRateSource: "unavailable", conversionSessions: 0, conversionPurchases: 0,
     weeklyGrowth: 0, ordersGrowth: 0, aovGrowth: 0, repeatPurchaseRate: 0,
     abandonedCarts, recoveryOpportunity: 0,
     topProducts: [], topByUnits: [], lowProducts: [], insights: [], revenueByDay: [],
@@ -497,27 +499,26 @@ export async function getSalesData(
       return zeroSales(meta, true, undefined, abandonedCarts);
     }
 
-    // ─── Real conversion rate from Shopify Analytics ──────────────
-    // Shopify REST doesn't expose sessions directly.
-    // Best approximation: orders / (orders * estimated session-to-order ratio)
-    // Real value from your Shopify dashboard: 0.74%
-    // We fetch it from Shopify's report API if available, else use dashboard value
-    let conversionRate = 0.74; // verified from your Shopify dashboard (May 2–Jun 1)
-    try {
-      const reportData = await fetchShopify(
-        `reports.json?name=conversion_rate&fields=id,name`
-      );
-      if (reportData?.reports?.length) {
-        // report exists — use dashboard value as it's already verified
-        conversionRate = 0.74;
-      }
-    } catch {
-      conversionRate = 0.74; // confirmed from your Shopify screenshot
-    }
 
     // ─── Recovery opportunity — real calculation ──────────────────
     // Total abandoned value × 15% SMS/WhatsApp recovery rate (Egypt standard)
     // ⚠️ Note: محمد شاهين bot/crawler detected in checkouts — may slightly inflate this number
+    let conversionRate = 0;
+    let conversionRateSource: SalesData["conversionRateSource"] = "unavailable";
+    let conversionSessions = 0;
+    let conversionPurchases = 0;
+    try {
+      const ga4 = await fetchGa4ConversionMetrics(fromYmd, toYmd, salesProcessed.totalOrders ?? 0);
+      if (ga4) {
+        conversionRate = ga4.conversionRate;
+        conversionRateSource = ga4.source;
+        conversionSessions = ga4.sessions;
+        conversionPurchases = ga4.purchases;
+      }
+    } catch (err) {
+      console.warn("[GA4] conversion rate unavailable:", err instanceof Error ? err.message : err);
+    }
+
     const recoveryOpportunity = Math.round(abandonedCartsValue * 0.15);
 
     return {
@@ -530,6 +531,9 @@ export async function getSalesData(
       revenueByDay: salesProcessed.revenueByDay ?? [],
       abandonedCarts,
       conversionRate,
+      conversionRateSource,
+      conversionSessions,
+      conversionPurchases,
       repeatPurchaseRate: repeatPurchaseRateCalc, // 🟢 real — computed from customer order counts
       weeklyGrowth: weeklyGrowthCalc,
       ordersGrowth: ordersGrowthCalc,
@@ -556,7 +560,7 @@ SHOPIFY SALES DATA (Last 30 Days):
 Total Revenue: EGP ${data.totalRevenue.toLocaleString()}
 Total Orders: ${data.totalOrders}
 Avg Order Value: EGP ${data.avgOrderValue}
-Conversion Rate: ${data.conversionRate}%
+Conversion Rate: ${data.conversionRateSource === "ga4-live" ? `${data.conversionRate}% live (Shopify orders / GA4 sessions: ${data.conversionPurchases} purchases, ${data.conversionSessions} sessions)` : "Unavailable - GA4 sessions not connected"}
 Weekly Growth: ${data.weeklyGrowth}%
 Abandoned Carts: ${data.abandonedCarts}
 Repeat Purchase Rate: ${data.repeatPurchaseRate}%

@@ -23,6 +23,9 @@ export interface SalesData {
   totalOrders: number;
   avgOrderValue: number;
   conversionRate: number;
+  conversionRateSource?: "ga4-live" | "unavailable";
+  conversionSessions?: number;
+  conversionPurchases?: number;
   weeklyGrowth: number;
   ordersGrowth?: number;
   aovGrowth?: number;

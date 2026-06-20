@@ -204,7 +204,7 @@ SALES DATA:
 - Total Revenue: EGP ${salesData.totalRevenue.toLocaleString()}
 - Total Orders: ${salesData.totalOrders}
 - Avg Order Value: EGP ${salesData.avgOrderValue}
-- Conversion Rate: ${salesData.conversionRate}%
+- Conversion Rate: ${salesData.conversionRateSource === "ga4-live" ? `${salesData.conversionRate}% live (Shopify orders / GA4 sessions: ${salesData.conversionPurchases} purchases, ${salesData.conversionSessions} sessions)` : "Unavailable - GA4 sessions not connected"}
 - Weekly Growth: ${salesData.weeklyGrowth}%
 - Repeat Purchase Rate: ${salesData.repeatPurchaseRate}%
 - Abandoned Carts: ${salesData.abandonedCarts}
