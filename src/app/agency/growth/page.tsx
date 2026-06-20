@@ -263,7 +263,6 @@ export default function GrowthAccelerationReportPage() {
                         <p className="text-sm font-bold text-foreground">{group.category}</p>
                         <p className="text-xs text-muted mt-1">
                           {money(group.revenue)} - {group.units} units - {group.rows.length} product families
-                          {group.stockRisks ? ` - ${group.stockRisks} stock risks` : ""}
                         </p>
                       </div>
                       <span className="text-xs text-accent">Open list</span>
@@ -333,7 +332,6 @@ function ProductMovementTable({ title, rows }: { title: string; rows: Report["pr
             <th className="py-2 pr-3">Units</th>
             <th className="py-2 pr-3">Revenue</th>
             <th className="py-2 pr-3">Unit change</th>
-            <th className="py-2 pr-3">Inventory</th>
             <th className="py-2 pr-3">Link</th>
           </tr>
         </thead>
@@ -344,13 +342,6 @@ function ProductMovementTable({ title, rows }: { title: string; rows: Report["pr
               <td className="py-3 pr-3 text-foreground font-bold">{p.units}</td>
               <td className="py-3 pr-3 text-foreground">{money(p.revenue)}</td>
               <td className={`py-3 pr-3 ${changeClass(p.unitChange)}`}>{change(p.unitChange)}</td>
-              <td className="py-3 pr-3">
-                {p.inventoryTotal === null ? (
-                  <span className="text-muted">N/A</span>
-                ) : (
-                  <span className={p.stockRisk ? "text-red-400" : "text-green-400"}>{p.inventoryTotal} units{p.stockRisk ? " risk" : ""}</span>
-                )}
-              </td>
               <td className="py-3 pr-3">
                 {p.url ? (
                   <a href={p.url} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1">
