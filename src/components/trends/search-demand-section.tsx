@@ -36,7 +36,7 @@ interface DemandTerm {
 const GARMENT_WORDS = [
   "suit","suits","blazer","blazers","jacket","jackets",
   "trouser","trousers","chino","chinos","pant","pants","jeans","denim",
-  "polo","shirt","shirts","tee","top","blouse","kaftan","abaya",
+  "polo","t-shirt","tshirt","t shirt","tee","shirt","shirts","top","blouse","kaftan","abaya",
   "dress","dresses","midi","maxi","mini","skirt","gown",
   "jumpsuit","romper","playsuit","co-ord","coord","set","sets",
   "shorts","overall","overalls",
@@ -46,6 +46,7 @@ const GARMENT_WORDS = [
 const CANONICAL: Record<string, string> = {
   suits:"suit", blazers:"blazer", jackets:"jacket", coats:"coat",
   trousers:"trouser", chinos:"chino", pants:"pant", jeans:"denim",
+  "t-shirt":"tshirt", "t shirt":"tshirt", tee:"tshirt",
   shirts:"shirt", dresses:"dress", sets:"set", coords:"co-ord",
   overalls:"overall", knitwear:"knit",
 };
@@ -150,6 +151,7 @@ const ENGLISH_OR_ARABIC = /^[؀-ۿa-zA-Z0-9\s\-'.,&]+$/;
 const MEN_SIGNAL   = /\bfor men\b|\bmen's\b|\bmen s\b|\bmale\b/i;
 const WOMEN_SIGNAL = /\bfor women\b|\bwomen's\b|\bwomen s\b|\bladies\b|\bfemale\b/i;
 const NOISE = /\breview\b|\bcompar\b|\bvs\b|\bwikipedia\b|\bhistory\b|\borigin\b|\bmean\b/i;
+const BEAUTY_NOISE = /\b(makeup|make-up|cosmetic|cosmetics|lipstick|lip stick|lip gloss|mascara|foundation|skincare|skin care|perfume|fragrance|haircut|hair color|nails?)\b/i;
 const FOREIGN_DISPLAY = /\b(vestido|camisa|pantalon|para|hombre|mujer|roupas?|pour|homme|femme|moda|ropa|avec|vêtement)\b/i;
 const GEO_JUNK_DISPLAY = /\b(uk|united kingdom|britain|american|europe|european)\s*$/i;
 const COLD_DISPLAY = /\b(leather jacket|leather coat|wool coat|puffer|down jacket|winter coat|sweater|sweatshirt|hoodie|turtleneck|cashmere coat|fleece|thermal)\b/i;
@@ -175,6 +177,7 @@ function buildDemandList(
       if (!ENGLISH_OR_ARABIC.test(t)) return;
       if (opposite.test(t)) return;
       if (NOISE.test(t)) return;
+      if (BEAUTY_NOISE.test(t)) return;
       if (FOREIGN_DISPLAY.test(t)) return;   // drop Portuguese/Spanish/French
       if (GEO_JUNK_DISPLAY.test(t)) return;  // drop "...uk" etc.
       if (COLD_DISPLAY.test(t)) return;       // drop cold-weather items

@@ -151,7 +151,7 @@ async function fetchProducts(): Promise<Map<number, ProductInfo>> {
 function inferCategory(title: string) {
   const t = title.toLowerCase();
   if (/\bpolo\b/.test(t)) return "Polo";
-  if (/t-shirt|tee/.test(t)) return "T-Shirt";
+  if (/\b(t-shirt|t shirt|tshirt|tee)\b/.test(t)) return "T-Shirt";
   if (/shirt|overshirt/.test(t)) return "Shirt";
   if (/suit/.test(t)) return "Suit";
   if (/blazer|jacket/.test(t)) return "Blazer";
@@ -479,7 +479,7 @@ export async function GET() {
       inRange(o, last24Start, currentEnd) &&
       o.fulfillment_status !== "fulfilled" &&
       ["pending", "authorized", "partially_paid"].includes(o.financial_status)
-    );
+    ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     const productComparison = compareRows(currentBreakdown.products, previousBreakdown.products, "key", true);
     const channelComparison = compareRows(currentBreakdown.channels, previousBreakdown.channels);

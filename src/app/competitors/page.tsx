@@ -14,7 +14,7 @@ import {
   Play, Megaphone, ShoppingBag, ChevronDown, ChevronRight, RefreshCw
 } from "lucide-react";
 
-// Social + Meta Ad Library links come from the shared brand registry (all 6 brands).
+// Social + Meta Ad Library links come from the shared brand registry.
 const BRAND_BY_NAME = new Map(COMPETITOR_BRANDS.map((b) => [b.name, b]));
 
 const SEGMENT_STYLES: Record<string, string> = {
@@ -373,7 +373,7 @@ export default function CompetitorsPage() {
           <div className="bg-surface border border-dashed border-border rounded-xl p-12 text-center">
             <Users className="w-12 h-12 text-accent mx-auto mb-4 opacity-50" />
             <p className="text-foreground font-semibold mb-2">No competitor research yet</p>
-            <p className="text-sm text-muted mb-6">Click <strong>Research competitors</strong> — searches the live web in <strong>Arabic &amp; English</strong> across 6 brands (Tie House, British House, Massimo Dutti, DeFacto, Town Team, LC Waikiki) and classifies their offers, garments &amp; campaign angles.</p>
+            <p className="text-sm text-muted mb-6">Click <strong>Research competitors</strong> — searches Egypt live web in <strong>Arabic &amp; English</strong> across 5 brands (Tie House, British House, Massimo Dutti, Town Team, LC Waikiki) and classifies their offers, garments &amp; campaign angles.</p>
           </div>
         )}
 

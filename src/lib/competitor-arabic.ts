@@ -58,7 +58,7 @@ export const COMPETITOR_BRANDS: CompetitorBrand[] = [
   },
   {
     key: "british-house", name: "British House", segment: "premium",
-    aliases: ["British House", "BritishHouse", "بريتش هاوس", "البريطانية"],
+    aliases: ["British House", "BritishHouse", "Britch House", "Bretch House", "بريتش هاوس", "بريتش هاوس ايجيبت", "البريطانية"],
     website: "britishhouse.shop",
     instagram: "https://www.instagram.com/british.house.official/", tiktok: "https://www.tiktok.com/@britishhouse", metaAds: META("british house egypt"),
   },
@@ -67,12 +67,6 @@ export const COMPETITOR_BRANDS: CompetitorBrand[] = [
     aliases: ["Massimo Dutti", "MassimoDutti", "ماسيمو دوتي", "ماسيمو دوتى"],
     website: "massimodutti.com",
     instagram: "https://www.instagram.com/massimodutti/", tiktok: "https://www.tiktok.com/@massimodutti", metaAds: META("massimo dutti"),
-  },
-  {
-    key: "defacto", name: "DeFacto", segment: "mass",
-    aliases: ["DeFacto", "De Facto", "ديفاكتو", "دي فاكتو"],
-    website: "defacto.com.eg",
-    instagram: "https://www.instagram.com/defacto/", tiktok: TT("defacto egypt"), metaAds: META("defacto"),
   },
   {
     key: "town-team", name: "Town Team", segment: "mass",
@@ -118,6 +112,7 @@ const WOMEN_EXTRA = ["للسيدات", "harimy", "nesai", "banaty"];
 // the whole offer list, the whole garment list, etc.
 export function buildBrandQueries(b: CompetitorBrand): { q: string; days: number }[] {
   const brand = `(${b.aliases.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" OR ")})`;
+  const egypt = `(Egypt OR Cairo OR "New Cairo" OR Alexandria OR Giza OR مصر OR القاهرة OR الاسكندرية OR الجيزة)`;
   const offers = `(خصم OR تخفيضات OR عروض OR "كود خصم" OR "كولكشن جديد" OR "شحن مجاني" OR sale OR discount OR offer)`;
   const menG = `(قميص OR بنطلون OR بولو OR تيشيرت OR بدله OR بليزر OR جينز OR shirt OR polo OR trousers OR suit)`;
   const womenG = `(فستان OR بلوزه OR جيبه OR بنطلون OR توب OR dress OR blouse OR skirt)`;
@@ -125,11 +120,11 @@ export function buildBrandQueries(b: CompetitorBrand): { q: string; days: number
   const season = `(صيف OR "صيف 2026" OR summer OR الساحل OR sahel OR شغل OR formal OR كلاسيك)`;
 
   return [
-    { q: `${brand} ${offers} مصر`, days: 60 },
-    { q: `${brand} رجالي ${menG} مصر`, days: 60 },
-    { q: `${brand} حريمي ${womenG} مصر`, days: 60 },
-    { q: `${brand} ${social} ${offers}`, days: 45 },
-    { q: `${brand} ${season} مصر 2026`, days: 60 },
+    { q: `${brand} ${egypt} ${offers}`, days: 60 },
+    { q: `${brand} ${egypt} رجالي ${menG}`, days: 60 },
+    { q: `${brand} ${egypt} حريمي ${womenG}`, days: 60 },
+    { q: `${brand} ${egypt} ${social} ${offers}`, days: 45 },
+    { q: `${brand} ${egypt} ${season} 2026`, days: 60 },
   ];
 }
 

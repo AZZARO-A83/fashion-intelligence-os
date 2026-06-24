@@ -18,6 +18,15 @@ const GENDER_STYLES: Record<string, string> = {
   unknown: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
 };
 
+const SCORE_LABELS: Record<string, { label: string; help: string }> = {
+  recurrence: { label: "Search repetition", help: "How many different real searches repeated this garment." },
+  multiSource: { label: "Source spread", help: "Whether the signal appears from more than one search source." },
+  buyingIntent: { label: "Buying intent", help: "How much the wording looks like shopping, price, store, or product intent." },
+  catalogMatch: { label: "Debackers fit", help: "Whether Debackers already has matching live products/categories." },
+  articleSupport: { label: "Article support", help: "Whether fresh fashion articles also mention this garment." },
+  customerDemand: { label: "Own-site demand", help: "Match with Search Console / cached customer search demand when connected." },
+};
+
 function Row({ row }: { row: DemandMapRow }) {
   const [open, setOpen] = useState(false);
   return (
@@ -98,7 +107,7 @@ function Row({ row }: { row: DemandMapRow }) {
                 <div className="space-y-1">
                   {Object.entries(row.scoreBreakdown).map(([k, v]) => (
                     <div key={k} className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted w-24 capitalize">{k}</span>
+                      <span className="text-[10px] text-muted w-28" title={SCORE_LABELS[k]?.help}>{SCORE_LABELS[k]?.label || k}</span>
                       <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
                         <div className="h-full bg-accent/60 rounded-full" style={{ width: `${Math.min(100, v)}%` }} />
                       </div>
@@ -126,7 +135,7 @@ export function SearchDemandMap({ rows }: { rows: DemandMapRow[] }) {
           <span className="text-[9px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-bold">🟢 LIVE · DETERMINISTIC</span>
         </div>
         <p className="text-xs text-muted">
-          What Egyptians actually search for, grouped by <strong className="text-foreground-muted">gender → garment type</strong> — classified by code <em>before</em> any AI. Fabric is a sub-layer, never the trend itself. Click a row for the real queries behind it.
+          What Egyptians actually search for, grouped by <strong className="text-foreground-muted">gender → garment type</strong>. The orange bars inside each row explain why the score is high: repeated searches, source spread, buying intent, Debackers fit, article support, and own-site demand when connected.
         </p>
       </div>
       <div className="overflow-x-auto">

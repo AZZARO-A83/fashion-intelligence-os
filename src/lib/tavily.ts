@@ -67,7 +67,7 @@ function hasFashionIntent(text: string): boolean {
 }
 
 function isRejectedContext(text: string): boolean {
-  return /\b(politics|war|refugee|deportation|travel alert|tourism|monorail|museum|ancient|pharaoh|archaeology|stock market|football|crime|court|weather|transport)\b/i.test(text);
+  return /\b(politics|war|refugee|deportation|travel alert|tourism|monorail|museum|ancient|pharaoh|archaeology|stock market|football|crime|court|weather|transport|beauty|makeup|make-up|cosmetic|cosmetics|lipstick|lip stick|lip gloss|mascara|foundation|skincare|skin care|perfume|fragrance|haircut|hair color|nails?)\b/i.test(text);
 }
 
 export async function tavilySearch(
@@ -176,7 +176,7 @@ export async function getSerperDynamicSearchSignals(): Promise<DynamicSearchSign
 
   // Fashion-only filter — drop non-buying queries
   const fashionFilter = /\b(wear|cloth|outfit|dress|shirt|trouser|pant|linen|cotton|fabric|style|fashion|trend|colour|color|brand|buy|shop|summer|winter|casual|formal|look|collection|ملابس|لبس|موضة|ستايل|ترند|فستان|قمصان|قميص|تيشيرت|بولو|بنطلون|بناطيل|جينز|بلوزة|توب|تنورة|جيبة|بدلة|حزام|جزمة|حذاء|صيف|كاجوال|فورمال)\b/i;
-  const clean = (arr: string[]) => arr.filter(s => fashionFilter.test(s) && s.length > 8 && s.length < 80);
+  const clean = (arr: string[]) => arr.filter(s => fashionFilter.test(s) && !isRejectedContext(s) && s.length > 8 && s.length < 80);
 
   return {
     menSignals: clean([...results[0].related, ...results[0].paa]).slice(0, 15),

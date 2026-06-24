@@ -83,6 +83,15 @@ export function classifySearchQuery(
   if (!def) {
     return { ...base, gender, rejectReason: "no garment type detected" };
   }
+  if ((gender === "men" && def.womenOnly) || (gender === "women" && def.menOnly)) {
+    return {
+      ...base,
+      gender,
+      garmentType: def.type,
+      garmentFamily: def.family,
+      rejectReason: `gender/category mismatch: ${def.type} is not valid for ${gender}`,
+    };
+  }
 
   const fabricHit = detectFabric(rawQuery);
   const fabric = fabricHit?.fabric ?? def.defaultFabric ?? null;
@@ -225,8 +234,14 @@ export function validateProductMatches(
   const out: { title: string; image: string; url: string; price: string }[] = [];
   const seen = new Set<string>();
   for (const p of products) {
-    const hay = `${p.title} ${p.type}`.toLowerCase();
-    if (!kws.some((k) => hay.includes(k))) continue;
+    const rawHay = `${p.title} ${p.type}`;
+    const hay = ` ${normalize(rawHay)} `;
+    const isTshirtLike = /\b(t shirt|tshirt|t-shirt|tee)\b/i.test(rawHay);
+    const isPoloLike = /\bpolo\b/i.test(rawHay);
+    const isOvershirtLike = /\b(over shirt|overshirt|over-shirt|shacket)\b/i.test(rawHay);
+    if (cluster.garmentType === "shirt" && (isTshirtLike || isPoloLike || isOvershirtLike)) continue;
+    if (cluster.garmentType === "tshirt" && (isPoloLike || isOvershirtLike)) continue;
+    if (!kws.some((k) => hay.includes(` ${normalize(k)} `))) continue;
     if (opp && opp.test(p.title)) continue;        // explicit opposite gender → skip
     const key = p.title.toLowerCase().trim();
     if (seen.has(key)) continue;

@@ -89,6 +89,20 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-EG", { day: "numeric", month: "short" });
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-EG", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function hoursAgo(iso: string) {
+  const hours = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 36_000) / 100);
+  return `${hours.toFixed(hours < 10 ? 1 : 0)}h ago`;
+}
+
 const growthMetricExplanations: Record<string, string> = {
   "Net sales": "Main money signal from Shopify orders in this report window.",
   Orders: "Demand volume. If orders fall, demand or conversion is the problem.",
@@ -251,7 +265,10 @@ export default function GrowthAccelerationReportPage() {
             <div className="bg-surface border border-border rounded-xl p-5">
               <p className="text-xs text-muted mb-2">Pending/unfulfilled</p>
               <p className="text-xl font-bold text-foreground">{report.pendingOrders.length}</p>
-              <p className="text-xs text-muted mt-2">{report.pendingWindow?.label || "Last 24 hours"} needing follow-up</p>
+              <p className="text-xs text-muted mt-2">
+                {report.pendingWindow?.label || "Last 24 hours"} needing follow-up
+                {report.pendingWindow ? ` (${formatDateTime(report.pendingWindow.from)} to ${formatDateTime(report.pendingWindow.to)})` : ""}
+              </p>
               <p className="text-[11px] text-foreground-muted mt-2 leading-relaxed">{growthMetricExplanations["Pending/unfulfilled"]}</p>
             </div>
           </div>
@@ -329,11 +346,14 @@ export default function GrowthAccelerationReportPage() {
               <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
                 <Truck className="w-4 h-4 text-accent" /> Pending/unfulfilled orders to recover - last rolling 24 hours
               </h2>
+              {report.pendingWindow && (
+                <p className="text-xs text-muted mb-3">Window: {formatDateTime(report.pendingWindow.from)} to {formatDateTime(report.pendingWindow.to)}. If all rows show today, that means there were no matching pending/unfulfilled orders from yesterday inside the same rolling window.</p>
+              )}
               <div className="grid gap-2">
                 {report.pendingOrders.map((order) => (
                   <div key={order.name} className="grid grid-cols-5 gap-3 bg-surface-2 border border-border rounded-lg p-3 text-xs">
                     <span className="font-bold text-foreground">{order.name}</span>
-                    <span className="text-muted">{new Date(order.createdAt).toLocaleDateString("en-EG")}</span>
+                    <span className="text-muted">{formatDateTime(order.createdAt)} · {hoursAgo(order.createdAt)}</span>
                     <span className="text-yellow-400">{order.financialStatus}</span>
                     <span className="text-muted">{order.fulfillmentStatus}</span>
                     <span className="text-foreground">{money(order.total)} {order.city ? `- ${order.city}` : ""}</span>

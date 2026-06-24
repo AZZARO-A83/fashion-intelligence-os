@@ -37,7 +37,7 @@ import { searchConsoleDemandSet, type SearchConsoleResult } from "./search-conso
 export type { Source };
 
 // ─── REFINE STEP (Layer 1/2 web sources for the Sources panel + article support) ─
-const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere|london fashion week|paris fashion week|milan fashion week|new york fashion week|uk fashion|british fashion|aw2[0-9]|autumn winter 202[0-9]|fw2[0-9]|winter coat|leather jacket|puffer|tweed|cashmere|fur coat|winter 202[0-9]|egypt safe|is egypt|safe to visit|travel guide|travel to egypt|egypt travel|egypt tourism|tourism in egypt|egypt tourist|life n style)\b/i;
+const JUNK = /\b(red carpet|celebrit|gala|award|cannes|oscar|festival|museum|gallery|heritage|ancient|pharaoh|history|wedding of|royal|met gala|premiere|london fashion week|paris fashion week|milan fashion week|new york fashion week|uk fashion|british fashion|aw2[0-9]|autumn winter 202[0-9]|fw2[0-9]|winter coat|leather jacket|puffer|tweed|cashmere|fur coat|winter 202[0-9]|egypt safe|is egypt|safe to visit|travel guide|travel to egypt|egypt travel|egypt tourism|tourism in egypt|egypt tourist|life n style|beauty|makeup|make-up|cosmetic|cosmetics|lipstick|lip stick|lip gloss|mascara|foundation|skincare|skin care|perfume|fragrance|haircut|hair color|nails?)\b/i;
 const FASHION = /\b(colou?r|fabric|linen|cotton|denim|silk|trouser|pant|chino|shirt|tee|polo|blazer|jacket|dress|skirt|abaya|kaftan|suit|collection|new arrival|silhouette|tailor|outfit|style|trend|wide.?leg|oversized|beige|stone|olive|navy|earth tone|bamboo|modal|viscose|chiffon|poplin|jersey)\b/i;
 
 function refineSources(sources: Source[]): Source[] {
@@ -127,6 +127,8 @@ function seedQueries(s: Seed): string[] {
     `${s.en} ${GENDER_WORD[s.gender]} egypt`,
     `${s.ar} ${AR_GENDER[s.gender]} مصر`,
     `${s.ar} ${AR_GENDER[s.gender]}`,
+    `اشتري ${s.ar} ${AR_GENDER[s.gender]} مصر`,
+    `${s.ar} ${AR_GENDER[s.gender]} اونلاين القاهرة`,
   ];
 }
 
@@ -533,9 +535,12 @@ Cover EVERY brand in the signals (use the exact brand name as the key). Return O
   // Dedupe sources across all brands for the Sources panel.
   const sources: Source[] = [];
   const seen = new Set<string>();
-  for (const { snippets } of perBrand) {
-    for (const s of snippets) {
-      if (s.url && !seen.has(s.url)) { seen.add(s.url); sources.push(s); }
+  for (const { cluster } of perBrand) {
+    for (const e of [...cluster.arabicEvidence, ...cluster.englishEvidence]) {
+      if (e.url && !seen.has(e.url)) {
+        seen.add(e.url);
+        sources.push({ title: e.text, url: e.url, summary: "Classified competitor evidence for Egypt market." });
+      }
     }
   }
 
