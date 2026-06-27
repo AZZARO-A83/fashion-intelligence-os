@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchSearchConsoleQueries, type SearchConsoleResult } from "@/lib/search-console";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -176,6 +177,14 @@ function pct(now: number, prev: number) {
 
 function money(v: number) {
   return Math.round(v);
+}
+
+async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
+  try {
+    return { data: await fetchSearchConsoleQueries(), error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Search Console unavailable" };
+  }
 }
 
 function inRange(order: Order, start: number, end: number) {
@@ -463,9 +472,10 @@ export async function GET() {
     const previousEnd = currentStart - 1;
     const previousStart = previousEnd - 7 * 86400000;
 
-    const [orders, products] = await Promise.all([
+    const [orders, products, searchConsole] = await Promise.all([
       fetchOrders(new Date(previousStart).toISOString(), new Date(currentEnd).toISOString()),
       fetchProducts(),
+      fetchGrowthSearchConsole(),
     ]);
 
     const currentOrders = orders.filter((o) => inRange(o, currentStart, currentEnd));
@@ -516,10 +526,22 @@ export async function GET() {
         total: Number(o.total_price || 0),
         city: normalizeCityName(o.shipping_address?.city, o.shipping_address?.province),
       })),
+      searchConsole: searchConsole.data
+        ? {
+            generatedAt: searchConsole.data.generatedAt,
+            startDate: searchConsole.data.startDate,
+            endDate: searchConsole.data.endDate,
+            siteUrl: searchConsole.data.siteUrl,
+            topQueries: searchConsole.data.queries.slice(0, 8),
+            opportunities: searchConsole.data.pageOpportunities.slice(0, 12),
+          }
+        : null,
+      searchConsoleError: searchConsole.error,
       dataLimits: [
         "New vs returning customer revenue requires longer customer order history than this 14-day diagnostic fetch.",
         "Inventory risk is based on active product variant inventory totals when available from Shopify products API.",
         "Channel labels are derived from Shopify order source, gateway, referrer, and landing fields; app-specific names depend on Shopify exposing them.",
+        "Search Console growth rows use Egypt web search data for the configured property only.",
       ],
     });
   } catch (err) {

@@ -10,6 +10,7 @@ import {
   MapPin,
   PackageCheck,
   RefreshCw,
+  Search,
   ShieldCheck,
   Target,
   Truck,
@@ -60,6 +61,15 @@ type Report = {
   categories: Array<{ name: string; units: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   pendingOrders: Array<{ name: string; createdAt: string; financialStatus: string; fulfillmentStatus: string; total: number; city: string | null }>;
   pendingWindow?: { from: string; to: string; label: string };
+  searchConsole: {
+    generatedAt: string;
+    startDate: string;
+    endDate: string;
+    siteUrl: string;
+    topQueries: Array<{ query: string; clicks: number; impressions: number; ctr: number; position: number; score: number }>;
+    opportunities: Array<{ query: string; page: string; clicks: number; impressions: number; ctr: number; position: number; score: number; action: string; reason: string }>;
+  } | null;
+  searchConsoleError?: string | null;
   dataLimits: string[];
   error?: string;
 };
@@ -78,6 +88,19 @@ function changeClass(value: number | null) {
   if (value > 0) return "text-green-400";
   if (value < 0) return "text-red-400";
   return "text-muted";
+}
+
+function pctText(value: number) {
+  return `${Math.round((value || 0) * 1000) / 10}%`;
+}
+
+function shortPage(url: string) {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname || "/";
+  } catch {
+    return url;
+  }
 }
 
 function Confidence({ value }: { value: number }) {
@@ -298,6 +321,8 @@ export default function GrowthAccelerationReportPage() {
             </div>
           </div>
 
+          <SearchConsoleGrowth report={report} />
+
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-1">
               <PackageCheck className="w-4 h-4 text-accent" /> Product movement by category
@@ -375,6 +400,98 @@ export default function GrowthAccelerationReportPage() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function SearchConsoleGrowth({ report }: { report: Report }) {
+  const gsc = report.searchConsole;
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="font-bold text-foreground flex items-center gap-2">
+            <Search className="w-4 h-4 text-accent" /> Google Search growth
+          </h2>
+          <p className="text-xs text-muted mt-1">
+            Search Console data for pages and queries. Shows actions only, not the full raw export.
+          </p>
+        </div>
+        {gsc && (
+          <span className="text-[10px] bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2 py-1 rounded">
+            {formatDate(gsc.startDate)} to {formatDate(gsc.endDate)}
+          </span>
+        )}
+      </div>
+
+      {!gsc && (
+        <div className="bg-yellow-500/10 border border-yellow-500/25 rounded-lg p-4">
+          <p className="text-sm font-bold text-yellow-400">Search Console not available</p>
+          <p className="text-xs text-foreground-muted mt-1">{report.searchConsoleError || "No Search Console data returned."}</p>
+        </div>
+      )}
+
+      {gsc && (
+        <div className="grid lg:grid-cols-[0.9fr_1.4fr] gap-5">
+          <div>
+            <p className="text-xs font-bold text-foreground mb-2">Search demand wins</p>
+            <div className="space-y-2">
+              {gsc.topQueries.slice(0, 6).map((row) => (
+                <div key={row.query} className="bg-surface-2 border border-border rounded-lg p-3">
+                  <p className="text-sm font-semibold text-foreground">{row.query}</p>
+                  <p className="text-xs text-muted mt-1">
+                    {row.clicks} clicks - {row.impressions} impressions - CTR {pctText(row.ctr)} - avg pos {row.position.toFixed(1)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-bold text-foreground mb-2">Pages to update</p>
+            {gsc.opportunities.length === 0 ? (
+              <div className="border border-border rounded-lg p-4 text-xs text-muted">No page-level SEO opportunities returned.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted border-b border-border">
+                      <th className="py-2 pr-3">Query</th>
+                      <th className="py-2 pr-3">Page</th>
+                      <th className="py-2 pr-3">CTR / pos</th>
+                      <th className="py-2 pr-3">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gsc.opportunities.slice(0, 8).map((row) => (
+                      <tr key={`${row.query}-${row.page}`} className="border-b border-border/60">
+                        <td className="py-3 pr-3">
+                          <p className="text-foreground font-medium">{row.query}</p>
+                          <p className="text-xs text-muted">{row.clicks} clicks - {row.impressions} impressions</p>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <a href={row.page} target="_blank" rel="noreferrer" className="text-accent hover:underline inline-flex items-center gap-1 max-w-[220px]">
+                            <span className="truncate">{shortPage(row.page)}</span>
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                          </a>
+                        </td>
+                        <td className="py-3 pr-3 text-foreground-muted">
+                          {pctText(row.ctr)} / {row.position.toFixed(1)}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <p className="text-xs font-bold text-green-400">{row.action}</p>
+                          <p className="text-[11px] text-muted mt-1 max-w-[240px]">{row.reason}</p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

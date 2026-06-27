@@ -9,8 +9,15 @@ export interface SearchConsoleQuery {
   score: number;
 }
 
+export interface SearchConsolePageOpportunity extends SearchConsoleQuery {
+  page: string;
+  action: string;
+  reason: string;
+}
+
 export interface SearchConsoleResult {
   queries: SearchConsoleQuery[];
+  pageOpportunities: SearchConsolePageOpportunity[];
   generatedAt: string;
   startDate: string;
   endDate: string;
@@ -90,6 +97,37 @@ function keepFashionQuery(query: string): boolean {
   return query.length >= 3 && FASHION_QUERY.test(query) && !REJECT_QUERY.test(query);
 }
 
+function actionForOpportunity(q: Omit<SearchConsolePageOpportunity, "score" | "action" | "reason">): { action: string; reason: string } {
+  if (q.impressions >= 100 && q.ctr < 0.015 && q.position <= 10) {
+    return {
+      action: "Rewrite title/meta for CTR",
+      reason: "High impressions and page-one visibility, but CTR is weak.",
+    };
+  }
+  if (q.impressions >= 80 && q.position > 10 && q.position <= 20) {
+    return {
+      action: "Add content section and internal links",
+      reason: "Demand exists, but ranking is stuck on page two.",
+    };
+  }
+  if (q.clicks >= 5 && q.position <= 5) {
+    return {
+      action: "Protect ranking and match page copy",
+      reason: "Already winning clicks; keep page aligned with this exact query.",
+    };
+  }
+  if (q.impressions >= 50 && q.ctr < 0.03) {
+    return {
+      action: "Improve search snippet",
+      reason: "People see the result but do not click enough.",
+    };
+  }
+  return {
+    action: "Monitor",
+    reason: "Useful signal, but not urgent yet.",
+  };
+}
+
 export function searchConsoleDemandSet(result: SearchConsoleResult | null | undefined): Set<string> {
   return new Set((result?.queries ?? []).map((q) => q.query.toLowerCase().trim()).filter(Boolean));
 }
@@ -102,6 +140,19 @@ export async function fetchSearchConsoleQueries(): Promise<SearchConsoleResult> 
   const rowLimit = Math.min(Number(process.env.GSC_ROW_LIMIT || 250), 1000);
 
   const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+  const baseBody = {
+    startDate,
+    endDate,
+    type: "web",
+    rowLimit,
+    dimensionFilterGroups: [
+      {
+        groupType: "and",
+        filters: [{ dimension: "country", operator: "equals", expression: "EGY" }],
+      },
+    ],
+  };
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -109,17 +160,8 @@ export async function fetchSearchConsoleQueries(): Promise<SearchConsoleResult> 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      startDate,
-      endDate,
+      ...baseBody,
       dimensions: ["query"],
-      type: "web",
-      rowLimit,
-      dimensionFilterGroups: [
-        {
-          groupType: "and",
-          filters: [{ dimension: "country", operator: "equals", expression: "EGY" }],
-        },
-      ],
     }),
   });
 
@@ -141,5 +183,43 @@ export async function fetchSearchConsoleQueries(): Promise<SearchConsoleResult> 
     .sort((a: SearchConsoleQuery, b: SearchConsoleQuery) => b.score - a.score)
     .slice(0, 120);
 
-  return { queries, generatedAt: new Date().toISOString(), startDate, endDate, siteUrl };
+  const pageRes = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...baseBody,
+      dimensions: ["query", "page"],
+    }),
+  });
+
+  if (!pageRes.ok) throw new Error(`Search Console page query failed: ${pageRes.status} ${await pageRes.text()}`);
+  const pageData = await pageRes.json();
+  const pageOpportunities: SearchConsolePageOpportunity[] = (pageData.rows ?? [])
+    .map((row: any) => {
+      const query = String(row.keys?.[0] || "").trim();
+      const page = String(row.keys?.[1] || "").trim();
+      const base = {
+        query,
+        page,
+        clicks: Number(row.clicks || 0),
+        impressions: Number(row.impressions || 0),
+        ctr: Number(row.ctr || 0),
+        position: Number(row.position || 0),
+      };
+      const action = actionForOpportunity(base);
+      return { ...base, ...action, score: scoreQuery(base) };
+    })
+    .filter((q: SearchConsolePageOpportunity) => keepFashionQuery(q.query))
+    .filter((q: SearchConsolePageOpportunity) => q.impressions >= 20 || q.clicks >= 3)
+    .sort((a: SearchConsolePageOpportunity, b: SearchConsolePageOpportunity) => {
+      const aOpportunity = a.impressions * Math.max(0.01, 0.08 - a.ctr) + Math.max(0, a.position - 5) * 5;
+      const bOpportunity = b.impressions * Math.max(0.01, 0.08 - b.ctr) + Math.max(0, b.position - 5) * 5;
+      return bOpportunity - aOpportunity;
+    })
+    .slice(0, 30);
+
+  return { queries, pageOpportunities, generatedAt: new Date().toISOString(), startDate, endDate, siteUrl };
 }
