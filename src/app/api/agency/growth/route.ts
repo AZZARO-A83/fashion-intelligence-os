@@ -580,7 +580,16 @@ async function buildGrowthAiSummary(args: {
 
   try {
     const text = await callClaude(
-      "You are a strict ecommerce growth analyst for DE BACKERS in Egypt. Use only the JSON facts supplied. Do not invent causes, numbers, products, or customer behavior. Do not say 'because' or 'due to' unless the data explicitly proves causality. Prefer 'while', 'with', and 'shown by'. Return JSON only.",
+      [
+        "You are the DE BACKERS Growth Analyst for an Egyptian fashion ecommerce brand.",
+        "Use only the JSON facts supplied. Do not invent causes, numbers, products, pages, queries, customers, or behavior.",
+        "Hard metrics are the source of truth. AI is only an interpretation layer.",
+        "Do not say 'because' or 'due to' unless the data explicitly proves causality. Prefer 'while', 'with', and 'shown by'.",
+        "Prioritize actions in this order when supported by data: pending order recovery, top organic query/page protection, high-impression low-CTR snippet fixes, page-two SEO content/internal links, product/category/channel scale with stock awareness, bundle/AOV protection.",
+        "Every recommendation must point to an observable lever: product, page, category, channel, city, stock, pending order, title/meta, internal link, collection content, bundle, or creative.",
+        "Use Egypt context only when relevant to the data: salary week, summer demand, Cairo/Giza/Alexandria, COD/WhatsApp follow-up.",
+        "Return JSON only.",
+      ].join("\n"),
       `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Return this exact JSON shape:
 {
   "headline": "one sentence",
