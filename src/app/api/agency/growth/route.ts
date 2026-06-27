@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchSearchConsoleQueries, type SearchConsoleResult } from "@/lib/search-console";
+import { callClaude } from "@/lib/claude-api";
+import { getCachedReport, isFresh, setCachedReport } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -43,6 +45,21 @@ type ProductInfo = {
   handle: string;
   product_type?: string;
   inventoryTotal: number;
+};
+
+type GrowthAiSummary = {
+  status: "ai" | "rule-based";
+  headline: string;
+  summary: string[];
+  advice: string[];
+  sectionNotes: {
+    sales: string;
+    seo: string;
+    products: string;
+    channels: string;
+    pending: string;
+  };
+  generatedAt: string;
 };
 
 function hasShopifyKeys() {
@@ -177,6 +194,13 @@ function pct(now: number, prev: number) {
 
 function money(v: number) {
   return Math.round(v);
+}
+
+function parseJson<T>(text: string): T {
+  const cleaned = text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  return JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned) as T;
 }
 
 async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
@@ -457,6 +481,142 @@ function buildFindings(current: any, previous: any, currentBreakdown: any, previ
   return findings;
 }
 
+function buildRuleBasedGrowthSummary(args: {
+  current: any;
+  previous: any;
+  findings: any[];
+  productRows: any[];
+  channelRows: any[];
+  cityRows: any[];
+  categoryRows: any[];
+  pending24h: Order[];
+  searchConsole: SearchConsoleResult | null;
+}): GrowthAiSummary {
+  const { current, previous, findings, productRows, channelRows, cityRows, categoryRows, pending24h, searchConsole } = args;
+  const revenueGrowth = pct(current.netSales, previous.netSales);
+  const ordersGrowth = pct(current.orders, previous.orders);
+  const aovGrowth = pct(current.aov, previous.aov);
+  const topProduct = productRows[0];
+  const topChannel = channelRows[0];
+  const topCity = cityRows[0];
+  const topCategory = categoryRows[0];
+  const topQuery = searchConsole?.queries?.[0];
+  const topSeoAction = searchConsole?.pageOpportunities?.[0];
+
+  return {
+    status: "rule-based",
+    headline: (revenueGrowth ?? 0) >= 0
+      ? "Growth is being carried by current sales depth; protect winners before widening spend."
+      : "Revenue is under pressure; fix the highest-signal sales and SEO leaks before scaling.",
+    summary: [
+      `Current 7-day net sales are EGP ${current.netSales.toLocaleString("en-EG")} from ${current.orders} orders; revenue change is ${revenueGrowth === null ? "new/no baseline" : `${revenueGrowth}%`}.`,
+      `AOV is EGP ${current.aov.toLocaleString("en-EG")} (${aovGrowth === null ? "new/no baseline" : `${aovGrowth}%`} vs previous).`,
+      topQuery ? `Top Search Console demand is "${topQuery.query}" with ${topQuery.clicks} clicks and ${topQuery.impressions} impressions.` : "Search Console is not available in this report.",
+    ],
+    advice: [
+      findings[0]?.action || "Use the strongest product/category/channel combination before adding new campaigns.",
+      topSeoAction ? `${topSeoAction.action} for "${topSeoAction.query}" on ${new URL(topSeoAction.page).pathname || "/"}.` : "Connect or refresh Search Console before making SEO decisions.",
+      pending24h.length ? "Recover pending/unfulfilled orders first; this is nearer money than new traffic." : "No urgent pending-order recovery signal is shown in the last rolling 24 hours.",
+    ],
+    sectionNotes: {
+      sales: `Sales changed ${revenueGrowth === null ? "with no baseline" : `${revenueGrowth}%`}; orders changed ${ordersGrowth === null ? "with no baseline" : `${ordersGrowth}%`}; AOV changed ${aovGrowth === null ? "with no baseline" : `${aovGrowth}%`}.`,
+      seo: topSeoAction
+        ? `Highest SEO action: ${topSeoAction.action} for "${topSeoAction.query}" because ${topSeoAction.reason.toLowerCase()}`
+        : "No page-level Search Console opportunity is available.",
+      products: topProduct
+        ? `${topProduct.title} leads product movement; ${topCategory?.name || topProduct.category} is the main product lane.`
+        : "No product movement rows are available.",
+      channels: topChannel
+        ? `${topChannel.name} is the strongest channel; ${topCity?.name || "no city"} is the strongest geo signal.`
+        : "No channel or city rows are available.",
+      pending: pending24h.length
+        ? `${pending24h.length} pending/unfulfilled orders need recovery follow-up.`
+        : "No pending/unfulfilled order recovery queue is visible in the last rolling 24 hours.",
+    },
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function buildGrowthAiSummary(args: {
+  current: any;
+  previous: any;
+  findings: any[];
+  productRows: any[];
+  channelRows: any[];
+  cityRows: any[];
+  categoryRows: any[];
+  pending24h: Order[];
+  searchConsole: SearchConsoleResult | null;
+}): Promise<GrowthAiSummary> {
+  const fallback = buildRuleBasedGrowthSummary(args);
+  const cacheKey = "report:growth-ai-summary:latest";
+  const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
+  if (cached && isFresh(cached.generatedAt, 6 * 60 * 60)) return cached.data;
+
+  try {
+    const payload = {
+      sales: {
+        current: args.current,
+        previous: args.previous,
+        revenueGrowth: pct(args.current.netSales, args.previous.netSales),
+        ordersGrowth: pct(args.current.orders, args.previous.orders),
+        aovGrowth: pct(args.current.aov, args.previous.aov),
+      },
+      findings: args.findings.slice(0, 5).map((f) => ({ title: f.title, evidence: f.evidence, action: f.action })),
+      topProducts: args.productRows.slice(0, 8).map((p) => ({ title: p.title, category: p.category, units: p.units, revenue: p.revenue, unitChange: p.unitChange, stockRisk: p.stockRisk })),
+      channels: args.channelRows.slice(0, 5),
+      cities: args.cityRows.slice(0, 5),
+      categories: args.categoryRows.slice(0, 5),
+      pendingCount: args.pending24h.length,
+      searchConsole: args.searchConsole ? {
+        window: { startDate: args.searchConsole.startDate, endDate: args.searchConsole.endDate },
+        topQueries: args.searchConsole.queries.slice(0, 8),
+        opportunities: args.searchConsole.pageOpportunities.slice(0, 8),
+      } : null,
+    };
+
+    const text = await callClaude(
+      "You are a strict ecommerce growth analyst for DE BACKERS in Egypt. Use only the JSON facts supplied. Do not invent causes, numbers, products, or customer behavior. Return JSON only.",
+      `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Return this exact JSON shape:
+{
+  "headline": "one sentence",
+  "summary": ["3 factual bullets"],
+  "advice": ["3 action bullets"],
+  "sectionNotes": {
+    "sales": "one sentence",
+    "seo": "one sentence",
+    "products": "one sentence",
+    "channels": "one sentence",
+    "pending": "one sentence"
+  }
+}
+
+Facts:
+${JSON.stringify(payload)}`,
+      1200
+    );
+    const parsed = parseJson<Omit<GrowthAiSummary, "status" | "generatedAt">>(text);
+    const result: GrowthAiSummary = {
+      status: "ai",
+      headline: parsed.headline || fallback.headline,
+      summary: Array.isArray(parsed.summary) ? parsed.summary.slice(0, 3) : fallback.summary,
+      advice: Array.isArray(parsed.advice) ? parsed.advice.slice(0, 3) : fallback.advice,
+      sectionNotes: {
+        sales: parsed.sectionNotes?.sales || fallback.sectionNotes.sales,
+        seo: parsed.sectionNotes?.seo || fallback.sectionNotes.seo,
+        products: parsed.sectionNotes?.products || fallback.sectionNotes.products,
+        channels: parsed.sectionNotes?.channels || fallback.sectionNotes.channels,
+        pending: parsed.sectionNotes?.pending || fallback.sectionNotes.pending,
+      },
+      generatedAt: new Date().toISOString(),
+    };
+    await setCachedReport(cacheKey, result, 6 * 60 * 60);
+    return result;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function GET() {
   if (!hasShopifyKeys()) {
     return NextResponse.json(
@@ -496,6 +656,17 @@ export async function GET() {
     const cityComparison = compareRows(currentBreakdown.cities, previousBreakdown.cities);
     const categoryComparison = compareRows(currentBreakdown.categories, previousBreakdown.categories);
     const findings = buildFindings(current, previous, currentBreakdown, previousBreakdown, pending24h);
+    const aiSummary = await buildGrowthAiSummary({
+      current,
+      previous,
+      findings,
+      productRows: productComparison,
+      channelRows: channelComparison,
+      cityRows: cityComparison,
+      categoryRows: categoryComparison,
+      pending24h,
+      searchConsole: searchConsole.data,
+    });
 
     return NextResponse.json({
       isLive: true,
@@ -512,6 +683,7 @@ export async function GET() {
         ordersGrowth: pct(current.orders, previous.orders),
         aovGrowth: pct(current.aov, previous.aov),
       },
+      aiSummary,
       findings,
       products: productComparison.slice(0, 80),
       channels: channelComparison.slice(0, 8),

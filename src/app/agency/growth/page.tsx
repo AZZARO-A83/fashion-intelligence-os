@@ -8,6 +8,7 @@ import {
   BarChart3,
   ExternalLink,
   MapPin,
+  MessageSquareText,
   PackageCheck,
   RefreshCw,
   Search,
@@ -29,6 +30,20 @@ type Report = {
     revenueGrowth: number | null;
     ordersGrowth: number | null;
     aovGrowth: number | null;
+  };
+  aiSummary?: {
+    status: "ai" | "rule-based";
+    headline: string;
+    summary: string[];
+    advice: string[];
+    sectionNotes: {
+      sales: string;
+      seo: string;
+      products: string;
+      channels: string;
+      pending: string;
+    };
+    generatedAt: string;
   };
   findings: Array<{
     type: string;
@@ -296,10 +311,15 @@ export default function GrowthAccelerationReportPage() {
             </div>
           </div>
 
+          {report.aiSummary && <GrowthSummaryAdvice summary={report.aiSummary} />}
+
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
               <Target className="w-4 h-4 text-accent" /> Root causes and acceleration actions
             </h2>
+            {report.aiSummary?.sectionNotes.sales && (
+              <SectionNote text={report.aiSummary.sectionNotes.sales} />
+            )}
             <div className="space-y-3">
               {report.findings.map((item, i) => (
                 <div key={`${item.title}-${i}`} className="bg-surface-2 border border-border rounded-xl p-4">
@@ -328,6 +348,9 @@ export default function GrowthAccelerationReportPage() {
               <PackageCheck className="w-4 h-4 text-accent" /> Product movement by category
             </h2>
             <p className="text-xs text-muted mb-4">Ranked from live Shopify line-item quantities. Slow movers are products below their category average, down vs the previous 7 days, or sold before but not in the current period.</p>
+            {report.aiSummary?.sectionNotes.products && (
+              <SectionNote text={report.aiSummary.sectionNotes.products} />
+            )}
             <div className="space-y-3">
               {groupProductsByCategory(report.products).map((group, index) => (
                 <details key={group.category} className="bg-surface-2 border border-border rounded-xl p-4" open={index < 3}>
@@ -361,6 +384,11 @@ export default function GrowthAccelerationReportPage() {
           </div>
 
           <div className="grid grid-cols-3 gap-6">
+            <div className="col-span-3">
+              {report.aiSummary?.sectionNotes.channels && (
+                <SectionNote text={report.aiSummary.sectionNotes.channels} />
+              )}
+            </div>
             <Breakdown title="Channels" icon={<Users className="w-4 h-4 text-accent" />} rows={report.channels} metric="orders" />
             <Breakdown title="Cities / regions" icon={<MapPin className="w-4 h-4 text-accent" />} rows={report.cities} metric="orders" />
             <Breakdown title="Categories" icon={<BarChart3 className="w-4 h-4 text-accent" />} rows={report.categories} metric="units" />
@@ -371,6 +399,9 @@ export default function GrowthAccelerationReportPage() {
               <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
                 <Truck className="w-4 h-4 text-accent" /> Pending/unfulfilled orders to recover - last rolling 24 hours
               </h2>
+              {report.aiSummary?.sectionNotes.pending && (
+                <SectionNote text={report.aiSummary.sectionNotes.pending} compact />
+              )}
               {report.pendingWindow && (
                 <p className="text-xs text-muted mb-3">Window: {formatDateTime(report.pendingWindow.from)} to {formatDateTime(report.pendingWindow.to)}. If all rows show today, that means there were no matching pending/unfulfilled orders from yesterday inside the same rolling window.</p>
               )}
@@ -451,6 +482,7 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
 
           <div>
             <p className="text-xs font-bold text-foreground mb-2">Pages to update</p>
+            {report.aiSummary?.sectionNotes.seo && <SectionNote text={report.aiSummary.sectionNotes.seo} compact />}
             {gsc.opportunities.length === 0 ? (
               <div className="border border-border rounded-lg p-4 text-xs text-muted">No page-level SEO opportunities returned.</div>
             ) : (
@@ -493,6 +525,56 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function GrowthSummaryAdvice({ summary }: { summary: NonNullable<Report["aiSummary"]> }) {
+  return (
+    <div className="bg-surface border border-accent/25 rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="font-bold text-foreground flex items-center gap-2">
+            <MessageSquareText className="w-4 h-4 text-accent" /> Summary and advice
+          </h2>
+          <p className="text-xs text-muted mt-1">
+            {summary.status === "ai" ? "AI summary from live Shopify and Search Console facts." : "Rule-based summary from live Shopify and Search Console facts."}
+          </p>
+        </div>
+        <span className="text-[10px] bg-accent/10 text-accent border border-accent/20 px-2 py-1 rounded uppercase">
+          {summary.status}
+        </span>
+      </div>
+
+      <p className="text-sm font-bold text-foreground mb-4">{summary.headline}</p>
+      <div className="grid md:grid-cols-2 gap-5">
+        <div>
+          <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">What is happening</p>
+          <div className="space-y-2">
+            {summary.summary.map((item, i) => (
+              <p key={`${item}-${i}`} className="text-sm text-foreground-muted leading-relaxed">{i + 1}. {item}</p>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">What to do next</p>
+          <div className="space-y-2">
+            {summary.advice.map((item, i) => (
+              <p key={`${item}-${i}`} className="text-sm text-green-300 leading-relaxed">{i + 1}. {item}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionNote({ text, compact = false }: { text: string; compact?: boolean }) {
+  return (
+    <div className={`bg-accent/5 border border-accent/15 rounded-lg ${compact ? "p-3 mb-3" : "p-4 mb-4"}`}>
+      <p className="text-xs text-foreground-muted leading-relaxed">
+        <span className="font-bold text-accent">Summary: </span>{text}
+      </p>
     </div>
   );
 }
