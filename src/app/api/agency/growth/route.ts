@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { fetchSearchConsoleQueries, type SearchConsoleResult } from "@/lib/search-console";
 import { callClaude } from "@/lib/claude-api";
 import { getCachedReport, isFresh, setCachedReport } from "@/lib/cache";
@@ -201,6 +202,10 @@ function parseJson<T>(text: string): T {
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   return JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned) as T;
+}
+
+function stableHash(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
 async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
@@ -549,32 +554,31 @@ async function buildGrowthAiSummary(args: {
   searchConsole: SearchConsoleResult | null;
 }): Promise<GrowthAiSummary> {
   const fallback = buildRuleBasedGrowthSummary(args);
-  const cacheKey = "report:growth-ai-summary:v2";
+  const payload = {
+    sales: {
+      current: args.current,
+      previous: args.previous,
+      revenueGrowth: pct(args.current.netSales, args.previous.netSales),
+      ordersGrowth: pct(args.current.orders, args.previous.orders),
+      aovGrowth: pct(args.current.aov, args.previous.aov),
+    },
+    findings: args.findings.slice(0, 5).map((f) => ({ title: f.title, evidence: f.evidence, action: f.action })),
+    topProducts: args.productRows.slice(0, 8).map((p) => ({ title: p.title, category: p.category, units: p.units, revenue: p.revenue, unitChange: p.unitChange, stockRisk: p.stockRisk })),
+    channels: args.channelRows.slice(0, 5),
+    cities: args.cityRows.slice(0, 5),
+    categories: args.categoryRows.slice(0, 5),
+    pendingCount: args.pending24h.length,
+    searchConsole: args.searchConsole ? {
+      window: { startDate: args.searchConsole.startDate, endDate: args.searchConsole.endDate },
+      topQueries: args.searchConsole.queries.slice(0, 8),
+      opportunities: args.searchConsole.pageOpportunities.slice(0, 8),
+    } : null,
+  };
+  const cacheKey = `report:growth-ai-summary:v3:${stableHash(payload)}`;
   const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
-  if (cached && isFresh(cached.generatedAt, 6 * 60 * 60)) return cached.data;
+  if (cached && isFresh(cached.generatedAt, 24 * 60 * 60)) return cached.data;
 
   try {
-    const payload = {
-      sales: {
-        current: args.current,
-        previous: args.previous,
-        revenueGrowth: pct(args.current.netSales, args.previous.netSales),
-        ordersGrowth: pct(args.current.orders, args.previous.orders),
-        aovGrowth: pct(args.current.aov, args.previous.aov),
-      },
-      findings: args.findings.slice(0, 5).map((f) => ({ title: f.title, evidence: f.evidence, action: f.action })),
-      topProducts: args.productRows.slice(0, 8).map((p) => ({ title: p.title, category: p.category, units: p.units, revenue: p.revenue, unitChange: p.unitChange, stockRisk: p.stockRisk })),
-      channels: args.channelRows.slice(0, 5),
-      cities: args.cityRows.slice(0, 5),
-      categories: args.categoryRows.slice(0, 5),
-      pendingCount: args.pending24h.length,
-      searchConsole: args.searchConsole ? {
-        window: { startDate: args.searchConsole.startDate, endDate: args.searchConsole.endDate },
-        topQueries: args.searchConsole.queries.slice(0, 8),
-        opportunities: args.searchConsole.pageOpportunities.slice(0, 8),
-      } : null,
-    };
-
     const text = await callClaude(
       "You are a strict ecommerce growth analyst for DE BACKERS in Egypt. Use only the JSON facts supplied. Do not invent causes, numbers, products, or customer behavior. Do not say 'because' or 'due to' unless the data explicitly proves causality. Prefer 'while', 'with', and 'shown by'. Return JSON only.",
       `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Return this exact JSON shape:
