@@ -549,7 +549,7 @@ async function buildGrowthAiSummary(args: {
   searchConsole: SearchConsoleResult | null;
 }): Promise<GrowthAiSummary> {
   const fallback = buildRuleBasedGrowthSummary(args);
-  const cacheKey = "report:growth-ai-summary:latest";
+  const cacheKey = "report:growth-ai-summary:v2";
   const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
   if (cached && isFresh(cached.generatedAt, 6 * 60 * 60)) return cached.data;
 
@@ -576,7 +576,7 @@ async function buildGrowthAiSummary(args: {
     };
 
     const text = await callClaude(
-      "You are a strict ecommerce growth analyst for DE BACKERS in Egypt. Use only the JSON facts supplied. Do not invent causes, numbers, products, or customer behavior. Return JSON only.",
+      "You are a strict ecommerce growth analyst for DE BACKERS in Egypt. Use only the JSON facts supplied. Do not invent causes, numbers, products, or customer behavior. Do not say 'because' or 'due to' unless the data explicitly proves causality. Prefer 'while', 'with', and 'shown by'. Return JSON only.",
       `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Return this exact JSON shape:
 {
   "headline": "one sentence",
