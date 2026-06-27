@@ -582,7 +582,7 @@ async function buildGrowthAiSummary(args: {
       opportunities: args.searchConsole.pageOpportunities.slice(0, 8),
     } : null,
   };
-  const cacheKey = `report:growth-ai-summary:v3:${stableHash(payload)}`;
+  const cacheKey = `report:growth-ai-summary:v4:${stableHash(payload)}`;
   const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
   if (cached && isFresh(cached.generatedAt, 24 * 60 * 60)) return cached.data;
 
