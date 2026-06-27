@@ -208,6 +208,14 @@ function stableHash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 
+function cleanSummaryText(text: string): string {
+  return text.replace(/\bdown\s+-/gi, "down ").replace(/\bdecrease(?:d|s|ing)?\s+by\s+-/gi, "decreased by ");
+}
+
+function cleanSummaryList(values: string[]): string[] {
+  return values.map(cleanSummaryText);
+}
+
 async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
   try {
     return { data: await fetchSearchConsoleQueries(), error: null };
@@ -609,17 +617,17 @@ ${JSON.stringify(payload)}`,
       1200
     );
     const parsed = parseJson<Omit<GrowthAiSummary, "status" | "generatedAt">>(text);
-    const result: GrowthAiSummary = {
+      const result: GrowthAiSummary = {
       status: "ai",
-      headline: parsed.headline || fallback.headline,
-      summary: Array.isArray(parsed.summary) ? parsed.summary.slice(0, 3) : fallback.summary,
-      advice: Array.isArray(parsed.advice) ? parsed.advice.slice(0, 3) : fallback.advice,
+      headline: cleanSummaryText(parsed.headline || fallback.headline),
+      summary: Array.isArray(parsed.summary) ? cleanSummaryList(parsed.summary.slice(0, 3)) : fallback.summary,
+      advice: Array.isArray(parsed.advice) ? cleanSummaryList(parsed.advice.slice(0, 3)) : fallback.advice,
       sectionNotes: {
-        sales: parsed.sectionNotes?.sales || fallback.sectionNotes.sales,
-        seo: parsed.sectionNotes?.seo || fallback.sectionNotes.seo,
-        products: parsed.sectionNotes?.products || fallback.sectionNotes.products,
-        channels: parsed.sectionNotes?.channels || fallback.sectionNotes.channels,
-        pending: parsed.sectionNotes?.pending || fallback.sectionNotes.pending,
+        sales: cleanSummaryText(parsed.sectionNotes?.sales || fallback.sectionNotes.sales),
+        seo: cleanSummaryText(parsed.sectionNotes?.seo || fallback.sectionNotes.seo),
+        products: cleanSummaryText(parsed.sectionNotes?.products || fallback.sectionNotes.products),
+        channels: cleanSummaryText(parsed.sectionNotes?.channels || fallback.sectionNotes.channels),
+        pending: cleanSummaryText(parsed.sectionNotes?.pending || fallback.sectionNotes.pending),
       },
       generatedAt: new Date().toISOString(),
     };
