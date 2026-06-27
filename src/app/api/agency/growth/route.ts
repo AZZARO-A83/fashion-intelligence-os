@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { fetchSearchConsoleQueries, type SearchConsoleResult } from "@/lib/search-console";
 import { callClaude } from "@/lib/claude-api";
-import { getCachedReport, isFresh, setCachedReport } from "@/lib/cache";
+import { CACHE_KEYS, getCachedReport, isFresh, setCachedReport } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -61,6 +61,26 @@ type GrowthAiSummary = {
     pending: string;
   };
   generatedAt: string;
+};
+
+type GrowthTrendContext = {
+  generatedAt: string | null;
+  topTrends: Array<{
+    name: string;
+    gender?: string;
+    garmentType?: string;
+    trendScore?: number;
+    searchSignalCount?: number;
+    recommendedAction?: string;
+  }>;
+  demandMap: Array<{
+    garmentLabel?: string;
+    gender?: string;
+    score?: number;
+    searchSignalCount?: number;
+    topIntent?: string;
+    exampleQueries?: string[];
+  }>;
 };
 
 function hasShopifyKeys() {
@@ -222,6 +242,34 @@ async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult |
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Search Console unavailable" };
   }
+}
+
+async function fetchGrowthTrendContext(): Promise<GrowthTrendContext> {
+  const cached = await getCachedReport<{
+    trends?: any[];
+    demandMap?: any[];
+  }>(CACHE_KEYS.trends);
+  const trends = cached?.data?.trends ?? [];
+  const demandMap = cached?.data?.demandMap ?? [];
+  return {
+    generatedAt: cached?.generatedAt ?? null,
+    topTrends: trends.slice(0, 8).map((t) => ({
+      name: String(t.name || ""),
+      gender: t.gender,
+      garmentType: t.garmentType,
+      trendScore: t.trendScore,
+      searchSignalCount: t.searchSignalCount,
+      recommendedAction: t.recommendedAction,
+    })),
+    demandMap: demandMap.slice(0, 10).map((d) => ({
+      garmentLabel: d.garmentLabel,
+      gender: d.gender,
+      score: d.score,
+      searchSignalCount: d.searchSignalCount,
+      topIntent: d.topIntent,
+      exampleQueries: Array.isArray(d.exampleQueries) ? d.exampleQueries.slice(0, 3) : [],
+    })),
+  };
 }
 
 function inRange(order: Order, start: number, end: number) {
@@ -504,8 +552,9 @@ function buildRuleBasedGrowthSummary(args: {
   categoryRows: any[];
   pending24h: Order[];
   searchConsole: SearchConsoleResult | null;
+  trends: GrowthTrendContext;
 }): GrowthAiSummary {
-  const { current, previous, findings, productRows, channelRows, cityRows, categoryRows, pending24h, searchConsole } = args;
+  const { current, previous, findings, productRows, channelRows, cityRows, categoryRows, pending24h, searchConsole, trends } = args;
   const revenueGrowth = pct(current.netSales, previous.netSales);
   const ordersGrowth = pct(current.orders, previous.orders);
   const aovGrowth = pct(current.aov, previous.aov);
@@ -515,6 +564,7 @@ function buildRuleBasedGrowthSummary(args: {
   const topCategory = categoryRows[0];
   const topQuery = searchConsole?.queries?.[0];
   const topSeoAction = searchConsole?.pageOpportunities?.[0];
+  const topTrend = trends.topTrends[0] || trends.demandMap[0];
 
   return {
     status: "rule-based",
@@ -525,6 +575,7 @@ function buildRuleBasedGrowthSummary(args: {
       `Current 7-day net sales are EGP ${current.netSales.toLocaleString("en-EG")} from ${current.orders} orders; revenue change is ${revenueGrowth === null ? "new/no baseline" : `${revenueGrowth}%`}.`,
       `AOV is EGP ${current.aov.toLocaleString("en-EG")} (${aovGrowth === null ? "new/no baseline" : `${aovGrowth}%`} vs previous).`,
       topQuery ? `Top Search Console demand is "${topQuery.query}" with ${topQuery.clicks} clicks and ${topQuery.impressions} impressions.` : "Search Console is not available in this report.",
+      topTrend ? `Trend context supports ${"garmentLabel" in topTrend ? topTrend.garmentLabel : topTrend.name} as a demand area.` : "No cached trend context is available.",
     ],
     advice: [
       findings[0]?.action || "Use the strongest product/category/channel combination before adding new campaigns.",
@@ -560,6 +611,7 @@ async function buildGrowthAiSummary(args: {
   categoryRows: any[];
   pending24h: Order[];
   searchConsole: SearchConsoleResult | null;
+  trends: GrowthTrendContext;
 }): Promise<GrowthAiSummary> {
   const fallback = buildRuleBasedGrowthSummary(args);
   const payload = {
@@ -581,6 +633,7 @@ async function buildGrowthAiSummary(args: {
       topQueries: args.searchConsole.queries.slice(0, 8),
       opportunities: args.searchConsole.pageOpportunities.slice(0, 8),
     } : null,
+    trends: args.trends,
   };
   const cacheKey = `report:growth-ai-summary:v4:${stableHash(payload)}`;
   const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
@@ -592,17 +645,18 @@ async function buildGrowthAiSummary(args: {
         "You are the DE BACKERS Growth Analyst for an Egyptian fashion ecommerce brand.",
         "Use only the JSON facts supplied. Do not invent causes, numbers, products, pages, queries, customers, or behavior.",
         "Hard metrics are the source of truth. AI is only an interpretation layer.",
+        "Use Shopify for commercial reality, Search Console for search demand/page actions, and cached trend scan data for market reinforcement. If these disagree, say so.",
         "Do not say 'because' or 'due to' unless the data explicitly proves causality. Prefer 'while', 'with', and 'shown by'.",
         "Prioritize actions in this order when supported by data: pending order recovery, top organic query/page protection, high-impression low-CTR snippet fixes, page-two SEO content/internal links, product/category/channel scale with stock awareness, bundle/AOV protection.",
         "Every recommendation must point to an observable lever: product, page, category, channel, city, stock, pending order, title/meta, internal link, collection content, bundle, or creative.",
         "Use Egypt context only when relevant to the data: salary week, summer demand, Cairo/Giza/Alexandria, COD/WhatsApp follow-up.",
         "Return JSON only.",
       ].join("\n"),
-      `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Return this exact JSON shape:
+      `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Use the search and trend data in the advice when available. Return this exact JSON shape:
 {
   "headline": "one sentence",
-  "summary": ["3 factual bullets"],
-  "advice": ["3 action bullets"],
+  "summary": ["3-4 factual bullets"],
+  "advice": ["3-4 action bullets"],
   "sectionNotes": {
     "sales": "one sentence",
     "seo": "one sentence",
@@ -620,8 +674,8 @@ ${JSON.stringify(payload)}`,
       const result: GrowthAiSummary = {
       status: "ai",
       headline: cleanSummaryText(parsed.headline || fallback.headline),
-      summary: Array.isArray(parsed.summary) ? cleanSummaryList(parsed.summary.slice(0, 3)) : fallback.summary,
-      advice: Array.isArray(parsed.advice) ? cleanSummaryList(parsed.advice.slice(0, 3)) : fallback.advice,
+      summary: Array.isArray(parsed.summary) ? cleanSummaryList(parsed.summary.slice(0, 4)) : fallback.summary,
+      advice: Array.isArray(parsed.advice) ? cleanSummaryList(parsed.advice.slice(0, 4)) : fallback.advice,
       sectionNotes: {
         sales: cleanSummaryText(parsed.sectionNotes?.sales || fallback.sectionNotes.sales),
         seo: cleanSummaryText(parsed.sectionNotes?.seo || fallback.sectionNotes.seo),
@@ -653,10 +707,11 @@ export async function GET() {
     const previousEnd = currentStart - 1;
     const previousStart = previousEnd - 7 * 86400000;
 
-    const [orders, products, searchConsole] = await Promise.all([
+    const [orders, products, searchConsole, trends] = await Promise.all([
       fetchOrders(new Date(previousStart).toISOString(), new Date(currentEnd).toISOString()),
       fetchProducts(),
       fetchGrowthSearchConsole(),
+      fetchGrowthTrendContext(),
     ]);
 
     const currentOrders = orders.filter((o) => inRange(o, currentStart, currentEnd));
@@ -687,6 +742,7 @@ export async function GET() {
       categoryRows: categoryComparison,
       pending24h,
       searchConsole: searchConsole.data,
+      trends,
     });
 
     return NextResponse.json({

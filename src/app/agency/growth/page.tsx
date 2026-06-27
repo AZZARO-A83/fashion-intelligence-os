@@ -118,6 +118,56 @@ function shortPage(url: string) {
   }
 }
 
+function clothingType(query: string) {
+  const q = query.toLowerCase();
+  if (/\b(tuxedo|suit|suits)\b/.test(q)) return "Suits";
+  if (/\bshirt|shirts|overshirt\b/.test(q)) return "Shirts";
+  if (/\btank\s*top|top|blouse\b/.test(q)) return "Tops";
+  if (/\bpant|pants|trouser|trousers|chino|jeans|gabardine\b/.test(q)) return "Pants";
+  if (/\bpolo\b/.test(q)) return "Polos";
+  if (/\bdress|dresses\b/.test(q)) return "Dresses";
+  if (/\bvest\b/.test(q)) return "Vests";
+  return "Other";
+}
+
+function groupedDemandWins(rows: NonNullable<Report["searchConsole"]>["topQueries"]) {
+  const groups = new Map<string, {
+    label: string;
+    clicks: number;
+    impressions: number;
+    weightedCtr: number;
+    weightedPosition: number;
+    queries: typeof rows;
+  }>();
+
+  for (const row of rows) {
+    const label = clothingType(row.query);
+    const current = groups.get(label) ?? {
+      label,
+      clicks: 0,
+      impressions: 0,
+      weightedCtr: 0,
+      weightedPosition: 0,
+      queries: [],
+    };
+    current.clicks += row.clicks;
+    current.impressions += row.impressions;
+    current.weightedCtr += row.ctr * row.impressions;
+    current.weightedPosition += row.position * row.impressions;
+    current.queries.push(row);
+    groups.set(label, current);
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      ctr: group.impressions ? group.weightedCtr / group.impressions : 0,
+      position: group.impressions ? group.weightedPosition / group.impressions : 0,
+      queries: group.queries.sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions),
+    }))
+    .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+}
+
 function Confidence({ value }: { value: number }) {
   const color = value >= 85 ? "text-green-400 bg-green-500/10" : value >= 70 ? "text-yellow-400 bg-yellow-500/10" : "text-red-400 bg-red-500/10";
   return <span className={`text-xs font-bold px-2 py-1 rounded ${color}`}>{value}%</span>;
@@ -438,6 +488,7 @@ export default function GrowthAccelerationReportPage() {
 
 function SearchConsoleGrowth({ report }: { report: Report }) {
   const gsc = report.searchConsole;
+  const demandGroups = gsc ? groupedDemandWins(gsc.topQueries) : [];
 
   return (
     <div className="bg-surface border border-border rounded-xl p-6">
@@ -465,16 +516,28 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
       )}
 
       {gsc && (
-        <div className="grid lg:grid-cols-[0.9fr_1.4fr] gap-5">
+        <div className="space-y-5">
           <div>
             <p className="text-xs font-bold text-foreground mb-2">Search demand wins</p>
-            <div className="space-y-2">
-              {gsc.topQueries.slice(0, 6).map((row) => (
-                <div key={row.query} className="bg-surface-2 border border-border rounded-lg p-3">
-                  <p className="text-sm font-semibold text-foreground">{row.query}</p>
+            <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+              {demandGroups.slice(0, 8).map((group) => (
+                <div key={group.label} className="bg-surface-2 border border-border rounded-lg p-3 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">{group.label}</p>
+                    <span className="text-[10px] text-accent bg-accent/10 border border-accent/20 px-1.5 py-0.5 rounded">
+                      {group.queries.length} queries
+                    </span>
+                  </div>
                   <p className="text-xs text-muted mt-1">
-                    {row.clicks} clicks - {row.impressions} impressions - CTR {pctText(row.ctr)} - avg pos {row.position.toFixed(1)}
+                    {group.clicks} clicks - {group.impressions} impressions - CTR {pctText(group.ctr)} - avg pos {group.position.toFixed(1)}
                   </p>
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {group.queries.slice(0, 4).map((row) => (
+                      <span key={row.query} className="text-[10px] text-foreground-muted bg-surface border border-border px-2 py-1 rounded-full">
+                        {row.query}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -538,7 +601,9 @@ function GrowthSummaryAdvice({ summary }: { summary: NonNullable<Report["aiSumma
             <MessageSquareText className="w-4 h-4 text-accent" /> Summary and advice
           </h2>
           <p className="text-xs text-muted mt-1">
-            {summary.status === "ai" ? "AI summary from live Shopify and Search Console facts." : "Rule-based summary from live Shopify and Search Console facts."}
+            {summary.status === "ai"
+              ? "AI summary from live Shopify, Search Console, and cached trend-scan facts."
+              : "Rule-based summary from live Shopify, Search Console, and cached trend-scan facts."}
           </p>
         </div>
         <span className="text-[10px] bg-accent/10 text-accent border border-accent/20 px-2 py-1 rounded uppercase">
