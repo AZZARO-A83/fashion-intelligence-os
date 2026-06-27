@@ -236,6 +236,64 @@ function cleanSummaryList(values: string[]): string[] {
   return values.map(cleanSummaryText);
 }
 
+function trendLabel(trends: GrowthTrendContext): string | null {
+  const topDemand = trends.demandMap[0];
+  if (topDemand?.garmentLabel) return `${topDemand.gender ? `${topDemand.gender} ` : ""}${topDemand.garmentLabel}`;
+  const topTrend = trends.topTrends[0];
+  return topTrend?.name || null;
+}
+
+function includesAny(values: string[], patterns: RegExp[]): boolean {
+  const text = values.join(" ").toLowerCase();
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function enforceSignalCoverage(
+  summary: GrowthAiSummary,
+  args: {
+    searchConsole: SearchConsoleResult | null;
+    trends: GrowthTrendContext;
+    pending24h: Order[];
+  }
+): GrowthAiSummary {
+  const result: GrowthAiSummary = {
+    ...summary,
+    summary: [...summary.summary],
+    advice: [...summary.advice],
+    sectionNotes: { ...summary.sectionNotes },
+  };
+  const topQuery = args.searchConsole?.queries?.[0];
+  const topSeoAction = args.searchConsole?.pageOpportunities?.[0];
+  const topTrend = trendLabel(args.trends);
+
+  if (topQuery && !includesAny(result.summary, [/search console|query|impression|ctr|organic|seo/])) {
+    result.summary.splice(2, 0, `Search demand: "${topQuery.query}" leads organic demand with ${topQuery.clicks} clicks, ${topQuery.impressions} impressions, CTR ${Math.round(topQuery.ctr * 1000) / 10}%, and average position ${Math.round(topQuery.position * 10) / 10}.`);
+  }
+
+  if (topTrend && !includesAny(result.summary, [/trend|demand map|market signal|search signal/])) {
+    result.summary.push(`Trend context: cached trend scan points to ${topTrend} as a market signal to compare against Shopify winners before scaling.`);
+  }
+
+  if (topSeoAction && !includesAny(result.advice, [/title|meta|snippet|internal link|seo|query|ranking|ctr/])) {
+    const path = (() => {
+      try { return new URL(topSeoAction.page).pathname || "/"; } catch { return topSeoAction.page; }
+    })();
+    result.advice.splice(1, 0, `${topSeoAction.action} for "${topSeoAction.query}" on ${path}; ${topSeoAction.reason}`);
+  }
+
+  if (topTrend && !includesAny(result.advice, [/trend|search demand|market signal|demand map/])) {
+    result.advice.splice(2, 0, `Use the trend scan as a cross-check: push products that overlap ${topTrend} only when Shopify sales and stock also support the move.`);
+  }
+
+  if (args.pending24h.length && !includesAny(result.advice, [/pending|follow up|recovery|unfulfilled/])) {
+    result.advice.push(`Recover ${args.pending24h.length} pending/unfulfilled orders before buying more traffic.`);
+  }
+
+  result.summary = cleanSummaryList(result.summary).slice(0, 4);
+  result.advice = cleanSummaryList(result.advice).slice(0, 4);
+  return result;
+}
+
 async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
   try {
     return { data: await fetchSearchConsoleQueries(), error: null };
@@ -635,7 +693,7 @@ async function buildGrowthAiSummary(args: {
     } : null,
     trends: args.trends,
   };
-  const cacheKey = `report:growth-ai-summary:v4:${stableHash(payload)}`;
+  const cacheKey = `report:growth-ai-summary:v5:${stableHash(payload)}`;
   const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
   if (cached && isFresh(cached.generatedAt, 24 * 60 * 60)) return cached.data;
 
@@ -671,7 +729,7 @@ ${JSON.stringify(payload)}`,
       1200
     );
     const parsed = parseJson<Omit<GrowthAiSummary, "status" | "generatedAt">>(text);
-      const result: GrowthAiSummary = {
+    const result = enforceSignalCoverage({
       status: "ai",
       headline: cleanSummaryText(parsed.headline || fallback.headline),
       summary: Array.isArray(parsed.summary) ? cleanSummaryList(parsed.summary.slice(0, 4)) : fallback.summary,
@@ -684,7 +742,11 @@ ${JSON.stringify(payload)}`,
         pending: cleanSummaryText(parsed.sectionNotes?.pending || fallback.sectionNotes.pending),
       },
       generatedAt: new Date().toISOString(),
-    };
+    }, {
+      searchConsole: args.searchConsole,
+      trends: args.trends,
+      pending24h: args.pending24h,
+    });
     await setCachedReport(cacheKey, result, 6 * 60 * 60);
     return result;
   } catch {
