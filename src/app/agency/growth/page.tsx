@@ -45,6 +45,16 @@ type Report = {
     };
     generatedAt: string;
   };
+  diagnostics?: Array<{
+    id: string;
+    ownerArea: "Sales" | "SEO" | "Ads" | "Product" | "Ops";
+    priority: "high" | "medium" | "low";
+    score: number;
+    problem: string;
+    evidence: string;
+    action: string;
+    confidence: number;
+  }>;
   findings: Array<{
     type: string;
     title: string;
@@ -361,7 +371,7 @@ export default function GrowthAccelerationReportPage() {
             </div>
           </div>
 
-          {report.aiSummary && <GrowthSummaryAdvice summary={report.aiSummary} />}
+          {report.aiSummary && <GrowthSummaryAdvice summary={report.aiSummary} diagnostics={report.diagnostics ?? []} />}
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
@@ -592,7 +602,13 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
   );
 }
 
-function GrowthSummaryAdvice({ summary }: { summary: NonNullable<Report["aiSummary"]> }) {
+function priorityClass(priority: "high" | "medium" | "low") {
+  if (priority === "high") return "bg-red-500/10 text-red-300 border-red-500/25";
+  if (priority === "medium") return "bg-yellow-500/10 text-yellow-300 border-yellow-500/25";
+  return "bg-blue-500/10 text-blue-300 border-blue-500/25";
+}
+
+function GrowthSummaryAdvice({ summary, diagnostics }: { summary: NonNullable<Report["aiSummary"]>; diagnostics: NonNullable<Report["diagnostics"]> }) {
   return (
     <div className="bg-surface border border-accent/25 rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 mb-4">
@@ -612,6 +628,29 @@ function GrowthSummaryAdvice({ summary }: { summary: NonNullable<Report["aiSumma
       </div>
 
       <p className="text-sm font-bold text-foreground mb-4">{summary.headline}</p>
+      {diagnostics.length > 0 && (
+        <div className="bg-surface-2 border border-border rounded-xl p-4 mb-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-xs font-bold text-foreground uppercase tracking-wide">Executive diagnosis</p>
+            <p className="text-[10px] text-muted">Rule-based, ranked by impact</p>
+          </div>
+          <div className="grid lg:grid-cols-3 gap-3">
+            {diagnostics.slice(0, 3).map((item) => (
+              <div key={item.id} className="bg-surface border border-border rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className={`text-[10px] border px-1.5 py-0.5 rounded uppercase ${priorityClass(item.priority)}`}>
+                    {item.priority}
+                  </span>
+                  <span className="text-[10px] text-muted">{item.ownerArea} - {item.score}/100</span>
+                </div>
+                <p className="text-xs font-bold text-foreground leading-snug">{item.problem}</p>
+                <p className="text-[11px] text-muted mt-2 leading-relaxed">{item.evidence}</p>
+                <p className="text-[11px] text-green-300 mt-2 leading-relaxed">Action: {item.action}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="grid md:grid-cols-2 gap-5">
         <div>
           <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">What is happening</p>

@@ -83,6 +83,17 @@ type GrowthTrendContext = {
   }>;
 };
 
+type GrowthDiagnosis = {
+  id: string;
+  ownerArea: "Sales" | "SEO" | "Ads" | "Product" | "Ops";
+  priority: "high" | "medium" | "low";
+  score: number;
+  problem: string;
+  evidence: string;
+  action: string;
+  confidence: number;
+};
+
 function hasShopifyKeys() {
   return !!(SHOPIFY_URL && SHOPIFY_TOKEN && SHOPIFY_TOKEN !== "your_token_here");
 }
@@ -241,6 +252,213 @@ function trendLabel(trends: GrowthTrendContext): string | null {
   if (topDemand?.garmentLabel) return `${topDemand.gender ? `${topDemand.gender} ` : ""}${topDemand.garmentLabel}`;
   const topTrend = trends.topTrends[0];
   return topTrend?.name || null;
+}
+
+function queryClothingType(query: string) {
+  const q = query.toLowerCase();
+  if (/\b(tuxedo|suit|suits)\b/.test(q)) return "Suit";
+  if (/\bshirt|shirts|overshirt\b/.test(q)) return "Shirt";
+  if (/\btank\s*top|top|blouse\b/.test(q)) return "Women Top";
+  if (/\bpant|pants|trouser|trousers|chino|jeans|gabardine\b/.test(q)) return "Pants";
+  if (/\bpolo\b/.test(q)) return "Polo";
+  if (/\bdress|dresses\b/.test(q)) return "Dress";
+  if (/\bvest\b/.test(q)) return "Vest";
+  return "Other";
+}
+
+function priorityFromScore(score: number): GrowthDiagnosis["priority"] {
+  if (score >= 80) return "high";
+  if (score >= 55) return "medium";
+  return "low";
+}
+
+function diagnosis(
+  id: string,
+  ownerArea: GrowthDiagnosis["ownerArea"],
+  score: number,
+  problem: string,
+  evidence: string,
+  action: string,
+  confidence: number
+): GrowthDiagnosis {
+  const clamped = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    id,
+    ownerArea,
+    priority: priorityFromScore(clamped),
+    score: clamped,
+    problem,
+    evidence,
+    action,
+    confidence: Math.max(0, Math.min(100, Math.round(confidence))),
+  };
+}
+
+function buildGrowthDiagnostics(args: {
+  current: any;
+  previous: any;
+  productRows: any[];
+  channelRows: any[];
+  cityRows: any[];
+  categoryRows: any[];
+  pending24h: Order[];
+  searchConsole: SearchConsoleResult | null;
+  trends: GrowthTrendContext;
+}): GrowthDiagnosis[] {
+  const rows: GrowthDiagnosis[] = [];
+  const { current, previous, productRows, channelRows, cityRows, categoryRows, pending24h, searchConsole, trends } = args;
+  const revenueGrowth = pct(current.netSales, previous.netSales);
+  const ordersGrowth = pct(current.orders, previous.orders);
+  const aovGrowth = pct(current.aov, previous.aov);
+  const revenue = Math.max(current.netSales, 1);
+  const topProduct = productRows[0];
+  const topCategory = categoryRows[0];
+  const topChannel = channelRows[0];
+  const topCity = cityRows[0];
+  const topQuery = searchConsole?.queries?.[0];
+  const topSeo = searchConsole?.pageOpportunities?.[0];
+  const lowCtr = searchConsole?.pageOpportunities?.find((x) => /ctr|snippet|title\/meta/i.test(`${x.action} ${x.reason}`));
+  const pageTwo = searchConsole?.pageOpportunities?.find((x) => x.position > 10 && x.position <= 20);
+  const trend = trendLabel(trends);
+
+  if (typeof revenueGrowth === "number" && revenueGrowth < -5) {
+    rows.push(diagnosis(
+      "sales-drop",
+      "Sales",
+      85 + Math.min(10, Math.abs(revenueGrowth) / 2),
+      "Revenue is down in the current 7-day window.",
+      `Net sales changed ${revenueGrowth}% while orders changed ${ordersGrowth === null ? "with no baseline" : `${ordersGrowth}%`} and AOV changed ${aovGrowth === null ? "with no baseline" : `${aovGrowth}%`}.`,
+      (aovGrowth ?? 0) >= 0
+        ? "Do not start with blanket discounts. Fix order volume using the strongest product/channel/SEO levers while protecting AOV."
+        : "Audit discounting, low-price mix, and cart composition before scaling traffic.",
+      current.orders >= 100 ? 91 : 78
+    ));
+  }
+
+  if (topCategory && topProduct) {
+    const categoryShare = Math.round((topCategory.revenue / revenue) * 1000) / 10;
+    rows.push(diagnosis(
+      "product-lane",
+      "Product",
+      Math.min(92, 55 + categoryShare),
+      `${topCategory.name} is the strongest commercial lane.`,
+      `${topCategory.name} generated EGP ${topCategory.revenue.toLocaleString("en-EG")} (${categoryShare}% of revenue). ${topProduct.title} generated EGP ${topProduct.revenue.toLocaleString("en-EG")} from ${topProduct.units} units.`,
+      `Use ${topProduct.title} as the hero, then cross-sell the next strongest ${topCategory.name} products. Confirm size-level stock before increasing spend.`,
+      88
+    ));
+  }
+
+  if (topChannel) {
+    const share = Math.round((topChannel.revenue / revenue) * 1000) / 10;
+    if (share >= 60) {
+      rows.push(diagnosis(
+        "channel-concentration",
+        "Ops",
+        Math.min(95, 45 + share / 1.2),
+        `${topChannel.name} is carrying most revenue.`,
+        `${topChannel.name} produced ${topChannel.orders} orders and EGP ${topChannel.revenue.toLocaleString("en-EG")} (${share}% of revenue).`,
+        /cash|cod|cartsaver/i.test(topChannel.name)
+          ? "Treat COD as the recovery engine: clearer WhatsApp/OTP copy, COD trust message, and follow-up inside 30-60 minutes."
+          : "Scale only the product/category creative proven in this channel; avoid spreading budget across weak lanes.",
+        topChannel.name === "Unknown" ? 60 : 84
+      ));
+    }
+  }
+
+  if (topCity && topCity.name !== "Unknown city") {
+    const share = Math.round((topCity.revenue / revenue) * 1000) / 10;
+    if (share >= 35) {
+      rows.push(diagnosis(
+        "geo-concentration",
+        "Ads",
+        Math.min(84, 42 + share),
+        `${topCity.name} is the current scale market.`,
+        `${topCity.name} generated ${topCity.orders} orders and EGP ${topCity.revenue.toLocaleString("en-EG")} (${share}% of revenue).`,
+        `Run a ${topCity.name}-specific angle: fast delivery, COD trust, and the best-selling category creative.`,
+        82
+      ));
+    }
+  }
+
+  if (pending24h.length) {
+    const pendingValue = pending24h.reduce((sum, order) => sum + Number(order.total_price || 0), 0);
+    rows.push(diagnosis(
+      "pending-recovery",
+      "Ops",
+      Math.min(92, 65 + pending24h.length * 4),
+      "Pending/unfulfilled orders are the fastest recovery lever.",
+      `${pending24h.length} pending/unfulfilled orders worth about EGP ${money(pendingValue).toLocaleString("en-EG")} appeared in the last 24 hours.`,
+      "Create a 24-hour rule: contact within 30 minutes, follow up after 2 hours, and tag unrecovered reason.",
+      88
+    ));
+  }
+
+  if (topSeo) {
+    rows.push(diagnosis(
+      "seo-top-page",
+      "SEO",
+      topSeo.clicks >= 10 ? 88 : 72,
+      `Organic search has a page/query pair worth protecting.`,
+      `"${topSeo.query}" has ${topSeo.clicks} clicks, ${topSeo.impressions} impressions, CTR ${Math.round(topSeo.ctr * 1000) / 10}%, and average position ${Math.round(topSeo.position * 10) / 10}.`,
+      `${topSeo.action}: keep the page copy, title, and internal links aligned with this exact query.`,
+      86
+    ));
+  }
+
+  if (lowCtr && `${lowCtr.query}-${lowCtr.page}` !== `${topSeo?.query}-${topSeo?.page}`) {
+    rows.push(diagnosis(
+      "seo-low-ctr",
+      "SEO",
+      lowCtr.impressions >= 500 ? 86 : 72,
+      "A visible search result is not getting enough clicks.",
+      `"${lowCtr.query}" has ${lowCtr.impressions} impressions, CTR ${Math.round(lowCtr.ctr * 1000) / 10}%, and average position ${Math.round(lowCtr.position * 10) / 10}.`,
+      `${lowCtr.action}: rewrite title/meta around the exact customer phrase and test clearer product/price intent.`,
+      83
+    ));
+  }
+
+  if (pageTwo) {
+    rows.push(diagnosis(
+      "seo-page-two",
+      "SEO",
+      70,
+      "One search opportunity is close but not ranking high enough.",
+      `"${pageTwo.query}" is averaging position ${Math.round(pageTwo.position * 10) / 10} with ${pageTwo.impressions} impressions.`,
+      "Add collection content, FAQs, internal links from relevant products, and stronger product coverage for this query.",
+      78
+    ));
+  }
+
+  if (topQuery && topCategory) {
+    const searchType = queryClothingType(topQuery.query);
+    if (searchType !== "Other" && searchType !== topCategory.name) {
+      rows.push(diagnosis(
+        "search-sales-gap",
+        "SEO",
+        82,
+        "Search demand and current sales winner are not the same category.",
+        `Top GSC query "${topQuery.query}" points to ${searchType}; Shopify top category is ${topCategory.name}.`,
+        `Protect ${searchType} SEO for organic demand while using ${topCategory.name} for paid/COD conversion until sales data shifts.`,
+        84
+      ));
+    }
+  }
+
+  if (trend && topCategory && !trend.toLowerCase().includes(topCategory.name.toLowerCase())) {
+    rows.push(diagnosis(
+      "trend-cross-check",
+      "Product",
+      64,
+      "Trend context should be used as a cross-check, not as proof to buy inventory.",
+      `Cached trend scan points to ${trend}; Shopify top category is ${topCategory.name}.`,
+      `Only push trend-overlapping products if they also have Shopify sales depth or Search Console demand. Keep ${topCategory.name} as the commercial base for now.`,
+      70
+    ));
+  }
+
+  return rows
+    .sort((a, b) => b.score - a.score || b.confidence - a.confidence)
+    .slice(0, 10);
 }
 
 function includesAny(values: string[], patterns: RegExp[]): boolean {
@@ -670,6 +888,7 @@ async function buildGrowthAiSummary(args: {
   pending24h: Order[];
   searchConsole: SearchConsoleResult | null;
   trends: GrowthTrendContext;
+  diagnostics: GrowthDiagnosis[];
 }): Promise<GrowthAiSummary> {
   const fallback = buildRuleBasedGrowthSummary(args);
   const payload = {
@@ -692,8 +911,9 @@ async function buildGrowthAiSummary(args: {
       opportunities: args.searchConsole.pageOpportunities.slice(0, 8),
     } : null,
     trends: args.trends,
+    diagnostics: args.diagnostics.slice(0, 8),
   };
-  const cacheKey = `report:growth-ai-summary:v5:${stableHash(payload)}`;
+  const cacheKey = `report:growth-ai-summary:v6:${stableHash(payload)}`;
   const cached = await getCachedReport<GrowthAiSummary>(cacheKey);
   if (cached && isFresh(cached.generatedAt, 24 * 60 * 60)) return cached.data;
 
@@ -704,13 +924,14 @@ async function buildGrowthAiSummary(args: {
         "Use only the JSON facts supplied. Do not invent causes, numbers, products, pages, queries, customers, or behavior.",
         "Hard metrics are the source of truth. AI is only an interpretation layer.",
         "Use Shopify for commercial reality, Search Console for search demand/page actions, and cached trend scan data for market reinforcement. If these disagree, say so.",
+        "The diagnostics array is rule-generated. Treat it as the recommendation source. Do not replace it with generic advice.",
         "Do not say 'because' or 'due to' unless the data explicitly proves causality. Prefer 'while', 'with', and 'shown by'.",
         "Prioritize actions in this order when supported by data: pending order recovery, top organic query/page protection, high-impression low-CTR snippet fixes, page-two SEO content/internal links, product/category/channel scale with stock awareness, bundle/AOV protection.",
         "Every recommendation must point to an observable lever: product, page, category, channel, city, stock, pending order, title/meta, internal link, collection content, bundle, or creative.",
         "Use Egypt context only when relevant to the data: salary week, summer demand, Cairo/Giza/Alexandria, COD/WhatsApp follow-up.",
         "Return JSON only.",
       ].join("\n"),
-      `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Use the search and trend data in the advice when available. Return this exact JSON shape:
+      `Summarize this Growth report for an operator. Keep it short, direct, and action-first. Base advice on diagnostics first, then use search and trend data as support. Return this exact JSON shape:
 {
   "headline": "one sentence",
   "summary": ["3-4 factual bullets"],
@@ -794,6 +1015,17 @@ export async function GET() {
     const cityComparison = compareRows(currentBreakdown.cities, previousBreakdown.cities);
     const categoryComparison = compareRows(currentBreakdown.categories, previousBreakdown.categories);
     const findings = buildFindings(current, previous, currentBreakdown, previousBreakdown, pending24h);
+    const diagnostics = buildGrowthDiagnostics({
+      current,
+      previous,
+      productRows: productComparison,
+      channelRows: channelComparison,
+      cityRows: cityComparison,
+      categoryRows: categoryComparison,
+      pending24h,
+      searchConsole: searchConsole.data,
+      trends,
+    });
     const aiSummary = await buildGrowthAiSummary({
       current,
       previous,
@@ -805,6 +1037,7 @@ export async function GET() {
       pending24h,
       searchConsole: searchConsole.data,
       trends,
+      diagnostics,
     });
 
     return NextResponse.json({
@@ -823,6 +1056,7 @@ export async function GET() {
         aovGrowth: pct(current.aov, previous.aov),
       },
       aiSummary,
+      diagnostics,
       findings,
       products: productComparison.slice(0, 80),
       channels: channelComparison.slice(0, 8),
