@@ -111,6 +111,7 @@ type GrowthDecisionReport = {
     trendSignal: string;
     decision: string;
     exampleSteps: string[];
+    details?: string[];
   }>;
   seoActions: Array<{
     query: string;
@@ -272,10 +273,12 @@ function inferCategory(title: string) {
   if (/\bpolo\b/.test(t)) return "Polo";
   if (/\b(t-shirt|t shirt|tshirt|tee)\b/.test(t)) return "T-Shirt";
   if (/shirt|overshirt/.test(t)) return "Shirt";
-  if (/suit/.test(t)) return "Suit";
+  if (/suit|tuxedo/.test(t)) return "Suit";
   if (/blazer|jacket/.test(t)) return "Blazer";
   if (/pant|trouser|jean|chino/.test(t)) return "Pants";
   if (/dress/.test(t)) return "Dress";
+  if (/vest/.test(t)) return "Vest";
+  if (/\bset\b/.test(t)) return "Sets";
   if (/blouse|top/.test(t)) return "Women Top";
   return "Other";
 }
@@ -487,6 +490,18 @@ function categoryExampleSteps(args: {
   ];
 }
 
+function categoryDetails(category: string, productRows: any[]) {
+  const rows = productRows
+    .filter((row) => row.category === category && row.units > 0)
+    .sort((a, b) => b.revenue - a.revenue || b.units - a.units)
+    .slice(0, 5);
+
+  return rows.map((row) => {
+    const movement = row.revenueChange === null ? "new/no baseline" : `${pctLabel(row.revenueChange)} revenue`;
+    return `${row.title}: ${egp(row.revenue)}, ${row.units} pieces, ${movement}`;
+  });
+}
+
 function buildDecisionReport(args: {
   current: any;
   previous: any;
@@ -587,6 +602,7 @@ function buildDecisionReport(args: {
       trendSignal,
       decision,
       exampleSteps: categoryExampleSteps({ category, decisionType, topProduct, search }),
+      details: categoryDetails(category, productRows),
     };
   });
 

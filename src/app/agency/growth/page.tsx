@@ -72,6 +72,7 @@ type Report = {
       trendSignal: string;
       decision: string;
       exampleSteps?: string[];
+      details?: string[];
     }>;
     seoActions: Array<{
       query: string;
@@ -613,7 +614,19 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
               {report.categoryDecisions.map((row) => (
                 <tr key={row.category} className="border-b border-border/60 align-top">
                   <td className="py-3 pr-3 text-foreground font-bold">{row.category}</td>
-                  <td className="py-3 pr-3 text-foreground-muted text-xs">{row.salesSignal}</td>
+                  <td className="py-3 pr-3 text-xs">
+                    <p className="text-foreground-muted">{row.salesSignal}</p>
+                    {row.details && row.details.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-[11px] text-accent">What is inside?</summary>
+                        <div className="mt-2 space-y-1">
+                          {row.details.map((detail) => (
+                            <p key={`${row.category}-${detail}`} className="text-[11px] text-foreground-muted leading-relaxed">{detail}</p>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </td>
                   <td className="py-3 pr-3 text-foreground-muted text-xs">{row.searchSignal}</td>
                   <td className="py-3 pr-3 text-foreground-muted text-xs">{row.trendSignal}</td>
                   <td className="py-3 pr-3 text-xs">
