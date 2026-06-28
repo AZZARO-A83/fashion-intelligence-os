@@ -99,7 +99,7 @@ type GrowthDecisionReport = {
   confidence: number;
   sourceWindows: string[];
   operatingMode: Array<{
-    lane: string;
+    focusArea: string;
     decision: string;
     evidence: string;
     action: string;
@@ -476,29 +476,29 @@ function buildDecisionReport(args: {
 
   const verdict = (revenueGrowth ?? 0) < -5
     ? `Current 7-day revenue is under pressure: net sales ${pctLabel(revenueGrowth)}, orders ${pctLabel(ordersGrowth)}, AOV ${pctLabel(aovGrowth)}. This is a recovery-and-focus week, not a broad scale week.`
-    : `Current 7-day revenue is holding: net sales ${pctLabel(revenueGrowth)}, orders ${pctLabel(ordersGrowth)}, AOV ${pctLabel(aovGrowth)}. Scale only the lanes with sales depth, search demand, and stock support.`;
+    : `Current 7-day revenue is holding: net sales ${pctLabel(revenueGrowth)}, orders ${pctLabel(ordersGrowth)}, AOV ${pctLabel(aovGrowth)}. Scale only the focus areas with sales depth, search demand, and stock support.`;
 
   const operatingMode = [
     topCategory && topProduct ? {
-      lane: "Paid / COD sales",
+      focusArea: "Paid / COD sales",
       decision: `${topCategory.name} is the commercial base.`,
       evidence: `${topCategory.name} generated ${egp(topCategory.revenue)} (${Math.round((topCategory.revenue / revenue) * 1000) / 10}% of revenue). ${topProduct.title} sold ${topProduct.units} units for ${egp(topProduct.revenue)}.`,
       action: `Use ${topProduct.title} as the paid/COD hero only after size-level stock is checked. Build bundles from the same category to protect AOV.`,
     } : null,
     topSearchCategory ? {
-      lane: "Organic search",
-      decision: `${topSearchCategory[0]} is the SEO demand lane.`,
+      focusArea: "Organic search",
+      decision: `${topSearchCategory[0]} is the SEO demand focus.`,
       evidence: `${topSearchCategory[1].clicks} clicks and ${topSearchCategory[1].impressions} impressions across grouped ${topSearchCategory[0]} queries. Top query: "${topSearchCategory[1].topQuery}".`,
       action: `Protect ranking pages for ${topSearchCategory[0]} and rewrite weak snippets before spending more on cold traffic.`,
     } : null,
     pending24h.length ? {
-      lane: "Order recovery",
+      focusArea: "Order recovery",
       decision: "Pending orders are the nearest money.",
       evidence: `${pending24h.length} pending/unfulfilled orders worth about ${egp(pendingValue)} in the last rolling 24 hours.`,
       action: "Call/WhatsApp inside 30 minutes, follow up after 2 hours, and tag every failed recovery reason.",
     } : null,
     topCity ? {
-      lane: "Geo focus",
+      focusArea: "Geo focus",
       decision: `${topCity.name} should anchor campaign messaging.`,
       evidence: `${topCity.name} generated ${topCity.orders} orders and ${egp(topCity.revenue)} (${Math.round((topCity.revenue / revenue) * 1000) / 10}% of revenue).`,
       action: `Use ${topCity.name} delivery/COD trust messaging first, then test Giza and Alexandria separately.`,
@@ -523,9 +523,9 @@ function buildDecisionReport(args: {
     let decision = "Watch; do not give it priority spend yet.";
 
     if (sales?.name === topCategory?.name) {
-      decision = "Use as paid/COD conversion lane, with stock check and bundle support.";
+      decision = "Use as paid/COD conversion focus, with stock check and bundle support.";
     } else if (search && search.impressions >= 500) {
-      decision = "Use as SEO/content lane first; paid scale only after Shopify sales and stock confirm.";
+      decision = "Use as SEO/content focus first; paid scale only after Shopify sales and stock confirm.";
     } else if (typeof sales?.revenueChange === "number" && sales.revenueChange > 20) {
       decision = "Keep visible and test small-budget creative before scaling.";
     } else if (typeof sales?.revenueChange === "number" && sales.revenueChange < -25) {
@@ -676,10 +676,10 @@ function buildGrowthDiagnostics(args: {
   if (topCategory && topProduct) {
     const categoryShare = Math.round((topCategory.revenue / revenue) * 1000) / 10;
     rows.push(diagnosis(
-      "product-lane",
+      "product-focus",
       "Product",
       Math.min(92, 55 + categoryShare),
-      `${topCategory.name} is the strongest commercial lane.`,
+      `${topCategory.name} is the strongest commercial focus.`,
       `${topCategory.name} generated EGP ${topCategory.revenue.toLocaleString("en-EG")} (${categoryShare}% of revenue). ${topProduct.title} generated EGP ${topProduct.revenue.toLocaleString("en-EG")} from ${topProduct.units} units.`,
       `Use ${topProduct.title} as the hero, then cross-sell the next strongest ${topCategory.name} products. Confirm size-level stock before increasing spend.`,
       88
@@ -697,7 +697,7 @@ function buildGrowthDiagnostics(args: {
         `${topChannel.name} produced ${topChannel.orders} orders and EGP ${topChannel.revenue.toLocaleString("en-EG")} (${share}% of revenue).`,
         /cash|cod|cartsaver/i.test(topChannel.name)
           ? "Treat COD as the recovery engine: clearer WhatsApp/OTP copy, COD trust message, and follow-up inside 30-60 minutes."
-          : "Scale only the product/category creative proven in this channel; avoid spreading budget across weak lanes.",
+          : "Scale only the product/category creative proven in this channel; avoid spreading budget across weak focus areas.",
         topChannel.name === "Unknown" ? 60 : 84
       ));
     }
@@ -1224,9 +1224,9 @@ function buildFindings(current: any, previous: any, currentBreakdown: any, previ
   if (topProduct && topCategory) {
     findings.push({
       type: "product-strategy",
-      title: `Product engine: ${topCategory.name} is the commercial lane, led by ${topProduct.title}`,
+      title: `Product engine: ${topCategory.name} is the commercial focus, led by ${topProduct.title}`,
       evidence: `${topCategory.name} generated EGP ${topCategory.revenue.toLocaleString("en-EG")} (${topCategoryShare}% of revenue). ${topProduct.title} alone generated EGP ${topProduct.revenue.toLocaleString("en-EG")} from ${topProduct.units} units (${topProductShare}% of revenue). ${secondProduct ? `Second product: ${secondProduct.title}, EGP ${secondProduct.revenue.toLocaleString("en-EG")}.` : ""}`,
-      action: `Build the next 48-hour push around this lane: hero ${topProduct.title}, cross-sell the next strongest ${topCategory.name} product, and keep weaker categories out of paid traffic until they prove demand.`,
+      action: `Build the next 48-hour push around this focus area: hero ${topProduct.title}, cross-sell the next strongest ${topCategory.name} product, and keep weaker categories out of paid traffic until they prove demand.`,
       confidence: 90,
       productUrl: topProduct.url,
     });
@@ -1335,7 +1335,7 @@ function buildRuleBasedGrowthSummary(args: {
         ? `Highest SEO action: ${topSeoAction.action} for "${topSeoAction.query}" because ${topSeoAction.reason.toLowerCase()}`
         : "No page-level Search Console opportunity is available.",
       products: topProduct
-        ? `${topProduct.title} leads product movement; ${topCategory?.name || topProduct.category} is the main product lane.`
+        ? `${topProduct.title} leads product movement; ${topCategory?.name || topProduct.category} is the main product focus.`
         : "No product movement rows are available.",
       channels: topChannel
         ? `${topChannel.name} is the strongest channel; ${topCity?.name || "no city"} is the strongest geo signal.`

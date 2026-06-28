@@ -9,7 +9,6 @@ import {
   CalendarDays,
   Clock,
   ExternalLink,
-  MapPin,
   MessageSquareText,
   PackageCheck,
   RefreshCw,
@@ -17,7 +16,6 @@ import {
   ShieldCheck,
   Target,
   Truck,
-  Users,
 } from "lucide-react";
 import { HelpButton } from "@/components/ui/help-button";
 
@@ -62,7 +60,7 @@ type Report = {
     confidence: number;
     sourceWindows: string[];
     operatingMode: Array<{
-      lane: string;
+      focusArea: string;
       decision: string;
       evidence: string;
       action: string;
@@ -452,6 +450,7 @@ export default function GrowthAccelerationReportPage() {
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
               <Target className="w-4 h-4 text-accent" /> Root causes and acceleration actions
             </h2>
+            <p className="text-xs text-muted mb-4">Shows the strongest causes and actions from the generated report. Use this after the decision report when you need the evidence behind each action.</p>
             {report.aiSummary?.sectionNotes.sales && (
               <SectionNote text={report.aiSummary.sectionNotes.sales} />
             )}
@@ -482,10 +481,7 @@ export default function GrowthAccelerationReportPage() {
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-1">
               <PackageCheck className="w-4 h-4 text-accent" /> Product movement by category
             </h2>
-            <p className="text-xs text-muted mb-4">Ranked from live Shopify line-item quantities. Slow movers are products below their category average, down vs the previous 7 days, or sold before but not in the current period.</p>
-            {report.aiSummary?.sectionNotes.products && (
-              <SectionNote text={report.aiSummary.sectionNotes.products} />
-            )}
+            <p className="text-xs text-muted mb-4">Shows which product families sold the most pieces and which products slowed versus the comparison period. "Pieces change" means the percentage change in quantity sold versus the old comparison window.</p>
             <div className="space-y-3">
               {groupProductsByCategory(report.products).map((group, index) => (
                 <details key={group.category} className="bg-surface-2 border border-border rounded-xl p-4" open={index < 3}>
@@ -494,7 +490,7 @@ export default function GrowthAccelerationReportPage() {
                       <div>
                         <p className="text-sm font-bold text-foreground">{group.category}</p>
                         <p className="text-xs text-muted mt-1">
-                          {money(group.revenue)} - {group.units} units - {group.rows.length} product families
+                          {money(group.revenue)} - {group.units} pieces - {group.rows.length} product families
                         </p>
                       </div>
                       <span className="text-xs text-accent">Open list</span>
@@ -506,8 +502,8 @@ export default function GrowthAccelerationReportPage() {
                         const topRows = topByUnits(group.rows);
                         return (
                           <>
-                            <ProductMovementTable title="Top 5 sellers by pieces" rows={topRows} />
-                            <ProductMovementTable title="Top 5 slow movers by real movement signal" rows={slowByMovement(group.rows, topRows)} showSignal emptyText="No clear slow mover outside the top sellers for this category." />
+                            <ProductMovementTable title="Top 5 sellers by pieces sold" rows={topRows} />
+                            <ProductMovementTable title="Top 5 slow movers by sales signal" rows={slowByMovement(group.rows, topRows)} showSignal emptyText="No clear slow mover outside the top sellers for this category." />
                           </>
                         );
                       })()}
@@ -518,20 +514,9 @@ export default function GrowthAccelerationReportPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
-            <div className="col-span-3">
-              {report.aiSummary?.sectionNotes.channels && (
-                <SectionNote text={report.aiSummary.sectionNotes.channels} />
-              )}
-            </div>
-            <Breakdown title="Channels" icon={<Users className="w-4 h-4 text-accent" />} rows={report.channels} metric="orders" />
-            <Breakdown title="Cities / regions" icon={<MapPin className="w-4 h-4 text-accent" />} rows={report.cities} metric="orders" />
-            <Breakdown title="Categories" icon={<BarChart3 className="w-4 h-4 text-accent" />} rows={report.categories} metric="units" />
-          </div>
-
           {report.pendingOrders.length > 0 && (
             <div className="bg-surface border border-border rounded-xl p-6">
-              <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
+                <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
                 <Truck className="w-4 h-4 text-accent" /> Pending/unfulfilled orders to recover - last rolling 24 hours
               </h2>
               {report.aiSummary?.sectionNotes.pending && (
@@ -582,7 +567,7 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
           <h2 className="font-bold text-foreground flex items-center gap-2">
             <Target className="w-4 h-4 text-accent" /> Decision report
           </h2>
-          <p className="text-xs text-muted mt-1">Rule-built from live Shopify, Search Console, and cached trend context. Use this for action planning.</p>
+          <p className="text-xs text-muted mt-1">Unified decision table from live Shopify sales, Search Console demand, trend context, channels, cities, and stock risk. Start here for what to do next.</p>
         </div>
         <Confidence value={report.confidence} />
       </div>
@@ -600,8 +585,8 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
 
       <div className="grid lg:grid-cols-2 gap-4 mb-5">
         {report.operatingMode.map((item) => (
-          <div key={item.lane} className="bg-surface-2 border border-border rounded-lg p-4">
-            <p className="text-xs text-accent font-bold uppercase tracking-wide">{item.lane}</p>
+          <div key={item.focusArea} className="bg-surface-2 border border-border rounded-lg p-4">
+            <p className="text-xs text-accent font-bold uppercase tracking-wide">{item.focusArea}</p>
             <p className="text-sm font-bold text-foreground mt-2">{item.decision}</p>
             <p className="text-xs text-muted mt-2 leading-relaxed">{item.evidence}</p>
             <p className="text-xs text-green-300 mt-2 leading-relaxed">Action: {item.action}</p>
@@ -611,6 +596,7 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
 
       <div className="mb-5">
         <p className="text-xs font-bold text-foreground mb-2">Category decisions</p>
+        <p className="text-xs text-muted mb-3">Compares each category across Shopify sales, Google Search Console demand, and cached trend signals, then tells whether to use it for paid sales, SEO/content, or watch only.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -640,6 +626,7 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
       <div className="grid xl:grid-cols-3 gap-4 mb-5">
         <DecisionList
           title="SEO actions"
+          description="Exact Google query/page fixes from Search Console: title, meta, copy, and internal-link work."
           rows={report.seoActions.map((row) => ({
             title: row.query,
             evidence: `${shortPage(row.page)} - ${row.evidence}`,
@@ -649,6 +636,7 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
         />
         <DecisionList
           title="Product actions"
+          description="Product-level selling actions based on revenue, pieces sold, movement, and stock risk."
           rows={report.productActions.slice(0, 6).map((row) => ({
             title: row.product,
             evidence: `${row.category} - ${row.evidence}`,
@@ -658,6 +646,7 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
         />
         <DecisionList
           title="Channel and geo"
+          description="Sales channel and city actions. This replaces the old separate repeated cards."
           rows={report.channelGeoActions.slice(0, 8).map((row) => ({
             title: row.area,
             evidence: row.evidence,
@@ -769,10 +758,11 @@ function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["order
   );
 }
 
-function DecisionList({ title, rows }: { title: string; rows: Array<{ title: string; evidence: string; action: string; href?: string }> }) {
+function DecisionList({ title, description, rows }: { title: string; description?: string; rows: Array<{ title: string; evidence: string; action: string; href?: string }> }) {
   return (
     <div className="bg-surface-2 border border-border rounded-lg p-4 min-w-0">
       <p className="text-xs font-bold text-foreground mb-3">{title}</p>
+      {description && <p className="text-[11px] text-muted leading-relaxed mb-3">{description}</p>}
       {rows.length === 0 ? (
         <p className="text-xs text-muted">No rows available.</p>
       ) : (
@@ -809,7 +799,7 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
             <Search className="w-4 h-4 text-accent" /> Google Search growth
           </h2>
           <p className="text-xs text-muted mt-1">
-            Search Console data for pages and queries. Shows actions only, not the full raw export.
+            Shows Google queries and pages that already get impressions/clicks. Use it for SEO title, meta, collection copy, and internal-link actions.
           </p>
         </div>
         {gsc && (
@@ -829,7 +819,7 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
       {gsc && (
         <div className="space-y-5">
           <div>
-            <p className="text-xs font-bold text-foreground mb-2">Search demand wins</p>
+            <p className="text-xs font-bold text-foreground mb-2">Search demand by clothing type</p>
             <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
               {demandGroups.slice(0, 8).map((group) => (
                 <div key={group.label} className="bg-surface-2 border border-border rounded-lg p-3 min-w-0">
@@ -856,6 +846,7 @@ function SearchConsoleGrowth({ report }: { report: Report }) {
 
           <div>
             <p className="text-xs font-bold text-foreground mb-2">Pages to update</p>
+            <p className="text-xs text-muted mb-3">Rows here are not generic SEO tips. Each action comes from the exact query, page, CTR, impressions, and average Google position.</p>
             {report.aiSummary?.sectionNotes.seo && <SectionNote text={report.aiSummary.sectionNotes.seo} compact />}
             {gsc.opportunities.length === 0 ? (
               <div className="border border-border rounded-lg p-4 text-xs text-muted">No page-level SEO opportunities returned.</div>
@@ -995,9 +986,9 @@ function ProductMovementTable({ title, rows, showSignal = false, emptyText = "No
         <thead>
           <tr className="text-left text-xs text-muted border-b border-border">
             <th className="py-2 pr-3">Product family</th>
-            <th className="py-2 pr-3">Units</th>
+            <th className="py-2 pr-3">Pieces sold</th>
             <th className="py-2 pr-3">Revenue</th>
-            <th className="py-2 pr-3">Unit change</th>
+            <th className="py-2 pr-3">Pieces change</th>
             {showSignal && <th className="py-2 pr-3">Why flagged</th>}
             <th className="py-2 pr-3">Link</th>
           </tr>
@@ -1022,28 +1013,6 @@ function ProductMovementTable({ title, rows, showSignal = false, emptyText = "No
         </tbody>
       </table>
       )}
-    </div>
-  );
-}
-
-function Breakdown({ title, icon, rows, metric }: { title: string; icon: React.ReactNode; rows: any[]; metric: "orders" | "units" }) {
-  return (
-    <div className="bg-surface border border-border rounded-xl p-5">
-      <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">{icon} {title}</h2>
-      <div className="space-y-2">
-        {rows.slice(0, 6).map((row) => (
-          <div key={row.name} className="bg-surface-2 border border-border rounded-lg p-3">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-medium text-foreground">{row.name}</p>
-              {row.isNew && <span className="text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">NEW</span>}
-            </div>
-            <p className="text-xs text-muted mt-1">
-              {money(row.revenue)} - {row[metric] ?? row.orders ?? row.units} {metric}
-            </p>
-            <p className={`text-xs mt-1 ${changeClass(row.revenueChange)}`}>{change(row.revenueChange)} revenue</p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
