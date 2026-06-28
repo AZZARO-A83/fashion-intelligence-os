@@ -110,6 +110,7 @@ type GrowthDecisionReport = {
     searchSignal: string;
     trendSignal: string;
     decision: string;
+    exampleSteps: string[];
   }>;
   seoActions: Array<{
     query: string;
@@ -444,6 +445,48 @@ function buildSearchGroups(searchConsole: SearchConsoleResult | null) {
   return groups;
 }
 
+function categoryExampleSteps(args: {
+  category: string;
+  decisionType: "paid-cod" | "seo-content" | "small-test" | "fix" | "watch";
+  topProduct?: any;
+  search?: { topQuery: string; impressions: number; clicks: number };
+}) {
+  const { category, decisionType, topProduct, search } = args;
+  if (decisionType === "paid-cod") {
+    return [
+      `Check size-level stock for ${topProduct?.title || `the best ${category} product`} before increasing spend.`,
+      `Create one ${category} hero ad with COD trust, clear delivery promise, and price/product proof.`,
+      `Bundle it with the next logical add-on, then use WhatsApp follow-up for pending COD orders.`,
+    ];
+  }
+  if (decisionType === "seo-content") {
+    return [
+      `Update the main ${category} collection title/meta around "${search?.topQuery || category}".`,
+      "Add collection copy, FAQs, and internal links from related products.",
+      "Wait for Shopify sales and stock confirmation before moving this category into paid scaling.",
+    ];
+  }
+  if (decisionType === "small-test") {
+    return [
+      `Run one small-budget ${category} creative test, not a full campaign.`,
+      "Compare orders, AOV, and stock after the test window.",
+      "Scale only if sales depth improves without lowering basket quality.",
+    ];
+  }
+  if (decisionType === "fix") {
+    return [
+      `Review ${category} price, product photos, first-screen collection sorting, and offer clarity.`,
+      "Test a new hook or bundle before buying more traffic.",
+      "Keep it out of main paid spend until revenue or pieces sold recover.",
+    ];
+  }
+  return [
+    `Keep ${category} visible in the store, but do not prioritize budget yet.`,
+    "Watch Search Console impressions and Shopify pieces sold in the next generated report.",
+    "Move it up only when sales, search demand, or trend support improves.",
+  ];
+}
+
 function buildDecisionReport(args: {
   current: any;
   previous: any;
@@ -521,18 +564,30 @@ function buildDecisionReport(args: {
       : "No grouped top-query signal";
     const trendSignal = trendMatchesCategory(trends, category);
     let decision = "Watch; do not give it priority spend yet.";
+    let decisionType: "paid-cod" | "seo-content" | "small-test" | "fix" | "watch" = "watch";
 
     if (sales?.name === topCategory?.name) {
       decision = "Use as paid/COD conversion focus, with stock check and bundle support.";
+      decisionType = "paid-cod";
     } else if (search && search.impressions >= 500) {
       decision = "Use as SEO/content focus first; paid scale only after Shopify sales and stock confirm.";
+      decisionType = "seo-content";
     } else if (typeof sales?.revenueChange === "number" && sales.revenueChange > 20) {
       decision = "Keep visible and test small-budget creative before scaling.";
+      decisionType = "small-test";
     } else if (typeof sales?.revenueChange === "number" && sales.revenueChange < -25) {
       decision = "Fix offer, creative, or merchandising before adding traffic.";
+      decisionType = "fix";
     }
 
-    return { category, salesSignal, searchSignal, trendSignal, decision };
+    return {
+      category,
+      salesSignal,
+      searchSignal,
+      trendSignal,
+      decision,
+      exampleSteps: categoryExampleSteps({ category, decisionType, topProduct, search }),
+    };
   });
 
   const seoActions = (searchConsole?.pageOpportunities ?? []).slice(0, 6).map((row) => ({
