@@ -55,6 +55,44 @@ type Report = {
     action: string;
     confidence: number;
   }>;
+  decisionReport?: {
+    verdict: string;
+    confidence: number;
+    sourceWindows: string[];
+    operatingMode: Array<{
+      lane: string;
+      decision: string;
+      evidence: string;
+      action: string;
+    }>;
+    categoryDecisions: Array<{
+      category: string;
+      salesSignal: string;
+      searchSignal: string;
+      trendSignal: string;
+      decision: string;
+    }>;
+    seoActions: Array<{
+      query: string;
+      page: string;
+      evidence: string;
+      action: string;
+    }>;
+    productActions: Array<{
+      product: string;
+      category: string;
+      evidence: string;
+      action: string;
+      url: string | null;
+    }>;
+    channelGeoActions: Array<{
+      area: string;
+      evidence: string;
+      action: string;
+    }>;
+    doNotDo: string[];
+    dataNotes: string[];
+  };
   findings: Array<{
     type: string;
     title: string;
@@ -85,6 +123,7 @@ type Report = {
   cities: Array<{ name: string; orders: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   categories: Array<{ name: string; units: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   pendingOrders: Array<{ name: string; createdAt: string; financialStatus: string; fulfillmentStatus: string; total: number; city: string | null }>;
+  pendingTotal?: number;
   pendingWindow?: { from: string; to: string; label: string };
   searchConsole: {
     generatedAt: string;
@@ -362,7 +401,7 @@ export default function GrowthAccelerationReportPage() {
             </div>
             <div className="bg-surface border border-border rounded-xl p-5">
               <p className="text-xs text-muted mb-2">Pending/unfulfilled</p>
-              <p className="text-xl font-bold text-foreground">{report.pendingOrders.length}</p>
+              <p className="text-xl font-bold text-foreground">{(report.pendingTotal ?? report.pendingOrders.length).toLocaleString("en-EG")}</p>
               <p className="text-xs text-muted mt-2">
                 {report.pendingWindow?.label || "Last 24 hours"} needing follow-up
                 {report.pendingWindow ? ` (${formatDateTime(report.pendingWindow.from)} to ${formatDateTime(report.pendingWindow.to)})` : ""}
@@ -372,6 +411,7 @@ export default function GrowthAccelerationReportPage() {
           </div>
 
           {report.aiSummary && <GrowthSummaryAdvice summary={report.aiSummary} diagnostics={report.diagnostics ?? []} />}
+          {report.decisionReport && <DecisionReport report={report.decisionReport} />}
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
@@ -463,7 +503,10 @@ export default function GrowthAccelerationReportPage() {
                 <SectionNote text={report.aiSummary.sectionNotes.pending} compact />
               )}
               {report.pendingWindow && (
-                <p className="text-xs text-muted mb-3">Window: {formatDateTime(report.pendingWindow.from)} to {formatDateTime(report.pendingWindow.to)}. If all rows show today, that means there were no matching pending/unfulfilled orders from yesterday inside the same rolling window.</p>
+                <p className="text-xs text-muted mb-3">
+                  Window: {formatDateTime(report.pendingWindow.from)} to {formatDateTime(report.pendingWindow.to)}.
+                  Showing {report.pendingOrders.length} of {(report.pendingTotal ?? report.pendingOrders.length).toLocaleString("en-EG")} matching orders.
+                </p>
               )}
               <div className="grid gap-2">
                 {report.pendingOrders.map((order) => (
@@ -491,6 +534,148 @@ export default function GrowthAccelerationReportPage() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function DecisionReport({ report }: { report: NonNullable<Report["decisionReport"]> }) {
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div>
+          <h2 className="font-bold text-foreground flex items-center gap-2">
+            <Target className="w-4 h-4 text-accent" /> Decision report
+          </h2>
+          <p className="text-xs text-muted mt-1">Rule-built from live Shopify, Search Console, and cached trend context. Use this for action planning.</p>
+        </div>
+        <Confidence value={report.confidence} />
+      </div>
+
+      <div className="bg-surface-2 border border-border rounded-xl p-4 mb-5">
+        <p className="text-sm font-bold text-foreground leading-relaxed">{report.verdict}</p>
+        <div className="flex flex-wrap gap-2 mt-3">
+          {report.sourceWindows.map((source) => (
+            <span key={source} className="text-[10px] text-foreground-muted bg-surface border border-border px-2 py-1 rounded-full">
+              {source}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4 mb-5">
+        {report.operatingMode.map((item) => (
+          <div key={item.lane} className="bg-surface-2 border border-border rounded-lg p-4">
+            <p className="text-xs text-accent font-bold uppercase tracking-wide">{item.lane}</p>
+            <p className="text-sm font-bold text-foreground mt-2">{item.decision}</p>
+            <p className="text-xs text-muted mt-2 leading-relaxed">{item.evidence}</p>
+            <p className="text-xs text-green-300 mt-2 leading-relaxed">Action: {item.action}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-5">
+        <p className="text-xs font-bold text-foreground mb-2">Category decisions</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted border-b border-border">
+                <th className="py-2 pr-3">Category</th>
+                <th className="py-2 pr-3">Shopify sales</th>
+                <th className="py-2 pr-3">Search Console</th>
+                <th className="py-2 pr-3">Trend context</th>
+                <th className="py-2 pr-3">Decision</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.categoryDecisions.map((row) => (
+                <tr key={row.category} className="border-b border-border/60 align-top">
+                  <td className="py-3 pr-3 text-foreground font-bold">{row.category}</td>
+                  <td className="py-3 pr-3 text-foreground-muted text-xs">{row.salesSignal}</td>
+                  <td className="py-3 pr-3 text-foreground-muted text-xs">{row.searchSignal}</td>
+                  <td className="py-3 pr-3 text-foreground-muted text-xs">{row.trendSignal}</td>
+                  <td className="py-3 pr-3 text-green-300 text-xs font-medium">{row.decision}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid xl:grid-cols-3 gap-4 mb-5">
+        <DecisionList
+          title="SEO actions"
+          rows={report.seoActions.map((row) => ({
+            title: row.query,
+            evidence: `${shortPage(row.page)} - ${row.evidence}`,
+            action: row.action,
+            href: row.page,
+          }))}
+        />
+        <DecisionList
+          title="Product actions"
+          rows={report.productActions.slice(0, 6).map((row) => ({
+            title: row.product,
+            evidence: `${row.category} - ${row.evidence}`,
+            action: row.action,
+            href: row.url || undefined,
+          }))}
+        />
+        <DecisionList
+          title="Channel and geo"
+          rows={report.channelGeoActions.slice(0, 8).map((row) => ({
+            title: row.area,
+            evidence: row.evidence,
+            action: row.action,
+          }))}
+        />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+          <p className="text-xs font-bold text-red-300 uppercase tracking-wide mb-2">Do not do</p>
+          <div className="space-y-2">
+            {report.doNotDo.map((item) => (
+              <p key={item} className="text-xs text-foreground-muted leading-relaxed">{item}</p>
+            ))}
+          </div>
+        </div>
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <p className="text-xs font-bold text-blue-300 uppercase tracking-wide mb-2">Data notes</p>
+          <div className="space-y-2">
+            {report.dataNotes.map((item) => (
+              <p key={item} className="text-xs text-foreground-muted leading-relaxed">{item}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DecisionList({ title, rows }: { title: string; rows: Array<{ title: string; evidence: string; action: string; href?: string }> }) {
+  return (
+    <div className="bg-surface-2 border border-border rounded-lg p-4 min-w-0">
+      <p className="text-xs font-bold text-foreground mb-3">{title}</p>
+      {rows.length === 0 ? (
+        <p className="text-xs text-muted">No rows available.</p>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row) => (
+            <div key={`${title}-${row.title}-${row.evidence}`} className="border-b border-border/60 pb-3 last:border-b-0 last:pb-0">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-bold text-foreground leading-snug">{row.title}</p>
+                {row.href && (
+                  <a href={row.href} target="_blank" rel="noreferrer" className="text-accent hover:underline flex-shrink-0">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+              <p className="text-[11px] text-muted mt-1 leading-relaxed">{row.evidence}</p>
+              <p className="text-[11px] text-green-300 mt-1 leading-relaxed">Action: {row.action}</p>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -94,6 +94,45 @@ type GrowthDiagnosis = {
   confidence: number;
 };
 
+type GrowthDecisionReport = {
+  verdict: string;
+  confidence: number;
+  sourceWindows: string[];
+  operatingMode: Array<{
+    lane: string;
+    decision: string;
+    evidence: string;
+    action: string;
+  }>;
+  categoryDecisions: Array<{
+    category: string;
+    salesSignal: string;
+    searchSignal: string;
+    trendSignal: string;
+    decision: string;
+  }>;
+  seoActions: Array<{
+    query: string;
+    page: string;
+    evidence: string;
+    action: string;
+  }>;
+  productActions: Array<{
+    product: string;
+    category: string;
+    evidence: string;
+    action: string;
+    url: string | null;
+  }>;
+  channelGeoActions: Array<{
+    area: string;
+    evidence: string;
+    action: string;
+  }>;
+  doNotDo: string[];
+  dataNotes: string[];
+};
+
 function hasShopifyKeys() {
   return !!(SHOPIFY_URL && SHOPIFY_TOKEN && SHOPIFY_TOKEN !== "your_token_here");
 }
@@ -228,6 +267,14 @@ function money(v: number) {
   return Math.round(v);
 }
 
+function egp(v: number) {
+  return `EGP ${money(v).toLocaleString("en-EG")}`;
+}
+
+function pctLabel(value: number | null) {
+  return value === null ? "no baseline" : `${value > 0 ? "+" : ""}${value}%`;
+}
+
 function parseJson<T>(text: string): T {
   const cleaned = text.replace(/```json\n?/gi, "").replace(/```/g, "").trim();
   const start = cleaned.indexOf("{");
@@ -264,6 +311,223 @@ function queryClothingType(query: string) {
   if (/\bdress|dresses\b/.test(q)) return "Dress";
   if (/\bvest\b/.test(q)) return "Vest";
   return "Other";
+}
+
+function trendCategoryMatches(category: string, label: string): boolean {
+  const c = category.toLowerCase();
+  const normalized = label.toLowerCase();
+  if (c === "shirt") return /\bshirts?\b/.test(normalized) && !/\bt[-\s]?shirts?\b/.test(normalized);
+  if (c === "t-shirt") return /\bt[-\s]?shirts?\b|\btees?\b/.test(normalized);
+  if (c === "suit") return /\bsuits?\b|\btuxedo\b/.test(normalized);
+  if (c === "pants") return /\bpants?\b|\btrousers?\b|\bchinos?\b|\bjeans?\b/.test(normalized);
+  if (c === "women top") return /\btops?\b|\bblouses?\b/.test(normalized);
+  if (c === "dress") return /\bdresses?\b/.test(normalized);
+  if (c === "polo") return /\bpolos?\b/.test(normalized);
+  if (c === "blazer") return /\bblazers?\b|\bjackets?\b/.test(normalized);
+  return normalized.includes(c);
+}
+
+function trendMatchesCategory(trends: GrowthTrendContext, category: string): string {
+  const trend = trends.demandMap.find((row) => {
+    const label = `${row.gender || ""} ${row.garmentLabel || ""} ${row.topIntent || ""}`.toLowerCase();
+    return trendCategoryMatches(category, label);
+  });
+  if (trend?.garmentLabel) {
+    return `${trend.gender ? `${trend.gender} ` : ""}${trend.garmentLabel}: score ${trend.score ?? "n/a"}, ${trend.searchSignalCount ?? 0} search signals`;
+  }
+
+  const topTrend = trends.topTrends.find((row) => {
+    const label = `${row.name || ""} ${row.gender || ""} ${row.garmentType || ""}`.toLowerCase();
+    return trendCategoryMatches(category, label);
+  });
+  if (topTrend?.name) {
+    return `${topTrend.name}: score ${topTrend.trendScore ?? "n/a"}, ${topTrend.searchSignalCount ?? 0} search signals`;
+  }
+
+  return "No matching cached trend signal";
+}
+
+function buildSearchGroups(searchConsole: SearchConsoleResult | null) {
+  const groups = new Map<string, { clicks: number; impressions: number; weightedCtr: number; weightedPosition: number; topQuery: string }>();
+  for (const row of searchConsole?.queries ?? []) {
+    const category = queryClothingType(row.query);
+    if (category === "Other") continue;
+    const current = groups.get(category) ?? {
+      clicks: 0,
+      impressions: 0,
+      weightedCtr: 0,
+      weightedPosition: 0,
+      topQuery: row.query,
+    };
+    if (row.clicks > current.clicks) current.topQuery = row.query;
+    current.clicks += row.clicks;
+    current.impressions += row.impressions;
+    current.weightedCtr += row.ctr * row.impressions;
+    current.weightedPosition += row.position * row.impressions;
+    groups.set(category, current);
+  }
+
+  return groups;
+}
+
+function buildDecisionReport(args: {
+  current: any;
+  previous: any;
+  productRows: any[];
+  channelRows: any[];
+  cityRows: any[];
+  categoryRows: any[];
+  pending24h: Order[];
+  searchConsole: SearchConsoleResult | null;
+  trends: GrowthTrendContext;
+  diagnostics: GrowthDiagnosis[];
+  currentStart: number;
+  currentEnd: number;
+  previousStart: number;
+  previousEnd: number;
+}): GrowthDecisionReport {
+  const { current, previous, productRows, channelRows, cityRows, categoryRows, pending24h, searchConsole, trends, diagnostics } = args;
+  const revenueGrowth = pct(current.netSales, previous.netSales);
+  const ordersGrowth = pct(current.orders, previous.orders);
+  const aovGrowth = pct(current.aov, previous.aov);
+  const topCategory = categoryRows[0];
+  const topProduct = productRows[0];
+  const topChannel = channelRows[0];
+  const topCity = cityRows[0];
+  const revenue = Math.max(current.netSales, 1);
+  const searchGroups = buildSearchGroups(searchConsole);
+  const topSearchCategory = [...searchGroups.entries()].sort((a, b) => b[1].clicks - a[1].clicks || b[1].impressions - a[1].impressions)[0];
+  const pendingValue = pending24h.reduce((sum, order) => sum + Number(order.total_price || 0), 0);
+  const stockRiskProducts = productRows.filter((p) => p.stockRisk).slice(0, 4);
+
+  const verdict = (revenueGrowth ?? 0) < -5
+    ? `Current 7-day revenue is under pressure: net sales ${pctLabel(revenueGrowth)}, orders ${pctLabel(ordersGrowth)}, AOV ${pctLabel(aovGrowth)}. This is a recovery-and-focus week, not a broad scale week.`
+    : `Current 7-day revenue is holding: net sales ${pctLabel(revenueGrowth)}, orders ${pctLabel(ordersGrowth)}, AOV ${pctLabel(aovGrowth)}. Scale only the lanes with sales depth, search demand, and stock support.`;
+
+  const operatingMode = [
+    topCategory && topProduct ? {
+      lane: "Paid / COD sales",
+      decision: `${topCategory.name} is the commercial base.`,
+      evidence: `${topCategory.name} generated ${egp(topCategory.revenue)} (${Math.round((topCategory.revenue / revenue) * 1000) / 10}% of revenue). ${topProduct.title} sold ${topProduct.units} units for ${egp(topProduct.revenue)}.`,
+      action: `Use ${topProduct.title} as the paid/COD hero only after size-level stock is checked. Build bundles from the same category to protect AOV.`,
+    } : null,
+    topSearchCategory ? {
+      lane: "Organic search",
+      decision: `${topSearchCategory[0]} is the SEO demand lane.`,
+      evidence: `${topSearchCategory[1].clicks} clicks and ${topSearchCategory[1].impressions} impressions across grouped ${topSearchCategory[0]} queries. Top query: "${topSearchCategory[1].topQuery}".`,
+      action: `Protect ranking pages for ${topSearchCategory[0]} and rewrite weak snippets before spending more on cold traffic.`,
+    } : null,
+    pending24h.length ? {
+      lane: "Order recovery",
+      decision: "Pending orders are the nearest money.",
+      evidence: `${pending24h.length} pending/unfulfilled orders worth about ${egp(pendingValue)} in the last rolling 24 hours.`,
+      action: "Call/WhatsApp inside 30 minutes, follow up after 2 hours, and tag every failed recovery reason.",
+    } : null,
+    topCity ? {
+      lane: "Geo focus",
+      decision: `${topCity.name} should anchor campaign messaging.`,
+      evidence: `${topCity.name} generated ${topCity.orders} orders and ${egp(topCity.revenue)} (${Math.round((topCity.revenue / revenue) * 1000) / 10}% of revenue).`,
+      action: `Use ${topCity.name} delivery/COD trust messaging first, then test Giza and Alexandria separately.`,
+    } : null,
+  ].filter(Boolean) as GrowthDecisionReport["operatingMode"];
+
+  const categoryNames = Array.from(new Set([
+    ...categoryRows.slice(0, 6).map((row) => row.name),
+    ...[...searchGroups.keys()].slice(0, 4),
+  ]));
+
+  const categoryDecisions = categoryNames.slice(0, 8).map((category) => {
+    const sales = categoryRows.find((row) => row.name === category);
+    const search = searchGroups.get(category);
+    const salesSignal = sales
+      ? `${egp(sales.revenue)}, ${sales.units} units, revenue ${pctLabel(sales.revenueChange)}`
+      : "No current Shopify category row";
+    const searchSignal = search
+      ? `${search.clicks} clicks, ${search.impressions} impressions, CTR ${Math.round((search.weightedCtr / Math.max(search.impressions, 1)) * 1000) / 10}%, avg pos ${Math.round((search.weightedPosition / Math.max(search.impressions, 1)) * 10) / 10}`
+      : "No grouped top-query signal";
+    const trendSignal = trendMatchesCategory(trends, category);
+    let decision = "Watch; do not give it priority spend yet.";
+
+    if (sales?.name === topCategory?.name) {
+      decision = "Use as paid/COD conversion lane, with stock check and bundle support.";
+    } else if (search && search.impressions >= 500) {
+      decision = "Use as SEO/content lane first; paid scale only after Shopify sales and stock confirm.";
+    } else if (typeof sales?.revenueChange === "number" && sales.revenueChange > 20) {
+      decision = "Keep visible and test small-budget creative before scaling.";
+    } else if (typeof sales?.revenueChange === "number" && sales.revenueChange < -25) {
+      decision = "Fix offer, creative, or merchandising before adding traffic.";
+    }
+
+    return { category, salesSignal, searchSignal, trendSignal, decision };
+  });
+
+  const seoActions = (searchConsole?.pageOpportunities ?? []).slice(0, 6).map((row) => ({
+    query: row.query,
+    page: row.page,
+    evidence: `${row.clicks} clicks, ${row.impressions} impressions, CTR ${Math.round(row.ctr * 1000) / 10}%, avg pos ${Math.round(row.position * 10) / 10}`,
+    action: row.action,
+  }));
+
+  const productActions = productRows.slice(0, 8).map((row) => ({
+    product: row.title,
+    category: row.category,
+    evidence: `${row.units} units, ${egp(row.revenue)}, revenue ${pctLabel(row.revenueChange)}, inventory ${row.inventoryTotal ?? "n/a"}`,
+    action: row.stockRisk
+      ? "Check sizes before spend; use as hero only if key sizes are available."
+      : row.key === topProduct?.key
+        ? "Use as hero product and pair with same-category cross-sell."
+        : "Use as support product in bundles, collection sorting, or retargeting.",
+    url: row.url,
+  }));
+
+  const channelGeoActions = [
+    ...channelRows.slice(0, 4).map((row) => ({
+      area: row.name,
+      evidence: `${row.orders} orders, ${egp(row.revenue)}, revenue ${pctLabel(row.revenueChange)}`,
+      action: /cash|cod|cartsaver/i.test(row.name)
+        ? "Improve COD trust, WhatsApp wording, and recovery timing."
+        : "Use only with proven product/category creative until sales depth improves.",
+    })),
+    ...cityRows.slice(0, 4).map((row) => ({
+      area: row.name,
+      evidence: `${row.orders} orders, ${egp(row.revenue)}, revenue ${pctLabel(row.revenueChange)}`,
+      action: row.name === topCity?.name
+        ? "Make this the main geo angle for delivery/COD trust."
+        : "Test separately; do not merge weak cities into the Cairo read.",
+    })),
+  ];
+
+  const doNotDo = [
+    "Do not broad-scale ads while orders and AOV are both down.",
+    "Do not discount everything; AOV is already down and blanket discounts can make the basket worse.",
+    stockRiskProducts.length
+      ? `Do not push stock-risk winners before checking sizes: ${stockRiskProducts.map((p) => p.title).join(", ")}.`
+      : "Do not assume inventory is safe; verify size-level stock before increasing spend.",
+    "Do not treat trend data as purchase proof unless Shopify sales or Search Console demand supports it.",
+  ];
+
+  return {
+    verdict,
+    confidence: current.orders >= 100 && searchConsole ? 90 : current.orders >= 50 ? 82 : 70,
+    sourceWindows: [
+      `Shopify current: ${new Date(args.currentStart).toISOString()} to ${new Date(args.currentEnd).toISOString()}`,
+      `Shopify previous: ${new Date(args.previousStart).toISOString()} to ${new Date(args.previousEnd).toISOString()}`,
+      searchConsole ? `Search Console: ${searchConsole.startDate} to ${searchConsole.endDate}` : "Search Console: unavailable",
+      trends.generatedAt ? `Trend cache: generated ${trends.generatedAt}` : "Trend cache: unavailable",
+    ],
+    operatingMode,
+    categoryDecisions,
+    seoActions,
+    productActions,
+    channelGeoActions,
+    doNotDo,
+    dataNotes: [
+      "This report is rule-built from live Shopify and Search Console rows; AI text is not used as the source of truth.",
+      "Search Console proves search visibility and click demand, not direct Shopify revenue by query.",
+      "Trend cache is supporting context only; refresh the trend scan before using it for buying or production decisions.",
+      "Inventory action uses product-level inventory total; size-level stock should be checked inside Shopify before scaling.",
+    ],
+  };
 }
 
 function priorityFromScore(score: number): GrowthDiagnosis["priority"] {
@@ -1026,6 +1290,22 @@ export async function GET() {
       searchConsole: searchConsole.data,
       trends,
     });
+    const decisionReport = buildDecisionReport({
+      current,
+      previous,
+      productRows: productComparison,
+      channelRows: channelComparison,
+      cityRows: cityComparison,
+      categoryRows: categoryComparison,
+      pending24h,
+      searchConsole: searchConsole.data,
+      trends,
+      diagnostics,
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd,
+    });
     const aiSummary = await buildGrowthAiSummary({
       current,
       previous,
@@ -1057,12 +1337,14 @@ export async function GET() {
       },
       aiSummary,
       diagnostics,
+      decisionReport,
       findings,
       products: productComparison.slice(0, 80),
       channels: channelComparison.slice(0, 8),
       cities: cityComparison.slice(0, 12),
       categories: categoryComparison.slice(0, 8),
       pendingWindow: { from: new Date(last24Start).toISOString(), to: new Date(currentEnd).toISOString(), label: "Last rolling 24 hours" },
+      pendingTotal: pending24h.length,
       pendingOrders: pending24h.slice(0, 10).map((o) => ({
         name: o.name,
         createdAt: o.created_at,
