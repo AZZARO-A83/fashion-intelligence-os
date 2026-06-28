@@ -133,6 +133,35 @@ type GrowthDecisionReport = {
   dataNotes: string[];
 };
 
+type OrderingPattern = {
+  timezone: string;
+  peakDay: string | null;
+  peakHour: string | null;
+  bestCampaignWindows: string[];
+  days: Array<{
+    day: string;
+    orders: number;
+    revenue: number;
+    share: number;
+    recommendation: string;
+  }>;
+  hours: Array<{
+    hour: number;
+    label: string;
+    orders: number;
+    revenue: number;
+    share: number;
+  }>;
+  channelTiming: Array<{
+    channel: string;
+    peakDay: string;
+    peakHour: string;
+    orders: number;
+    revenue: number;
+    action: string;
+  }>;
+};
+
 function hasShopifyKeys() {
   return !!(SHOPIFY_URL && SHOPIFY_TOKEN && SHOPIFY_TOKEN !== "your_token_here");
 }
@@ -273,6 +302,51 @@ function egp(v: number) {
 
 function pctLabel(value: number | null) {
   return value === null ? "no baseline" : `${value > 0 ? "+" : ""}${value}%`;
+}
+
+function cairoDateString(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function cairoStartOfDayMs(date: string) {
+  return new Date(`${date}T00:00:00+02:00`).getTime();
+}
+
+function cairoEndOfDayMs(date: string) {
+  return new Date(`${date}T23:59:59.999+02:00`).getTime();
+}
+
+function parseReportWindow(url: string) {
+  const params = new URL(url).searchParams;
+  const today = cairoDateString();
+  const toDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("to") || "") ? params.get("to")! : today;
+  const defaultFrom = cairoDateString(new Date(cairoEndOfDayMs(toDate) - 6 * 86400000));
+  const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("from") || "") ? params.get("from")! : defaultFrom;
+  let currentStart = cairoStartOfDayMs(fromDate);
+  let currentEnd = toDate === today ? Date.now() : cairoEndOfDayMs(toDate);
+
+  if (!Number.isFinite(currentStart) || currentStart > currentEnd) {
+    currentStart = cairoStartOfDayMs(defaultFrom);
+    currentEnd = toDate === today ? Date.now() : cairoEndOfDayMs(toDate);
+  }
+
+  const dayCount = Math.max(1, Math.round((cairoStartOfDayMs(toDate) - currentStart) / 86400000) + 1);
+  const previousEnd = currentStart - 1;
+  const previousStart = currentStart - dayCount * 86400000;
+
+  return {
+    fromDate: cairoDateString(new Date(currentStart)),
+    toDate: cairoDateString(new Date(currentEnd)),
+    currentStart,
+    currentEnd,
+    previousStart,
+    previousEnd,
+  };
 }
 
 function parseJson<T>(text: string): T {
@@ -845,7 +919,140 @@ function channelName(order: Order) {
   if (/facebook|instagram|meta/.test(raw)) return "Meta / Social";
   if (/google/.test(raw)) return "Google";
   if (/shopify|web|online_store/.test(raw)) return "Online Store";
+  if (/^\d+$/.test(String(order.source_name || ""))) return `Shopify app ${order.source_name}`;
   return order.source_name || "Unknown";
+}
+
+function cairoOrderParts(iso: string) {
+  const date = new Date(iso);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Cairo", weekday: "long" }).format(date);
+  const hourText = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", hour12: false }).format(date);
+  const hour = Number(hourText);
+  return { weekday, hour: Number.isFinite(hour) ? hour : 0 };
+}
+
+function hourLabel(hour: number) {
+  const next = (hour + 1) % 24;
+  const fmt = (value: number) => `${String(value).padStart(2, "0")}:00`;
+  return `${fmt(hour)}-${fmt(next)}`;
+}
+
+function orderTimingAction(channel: string, peakDay: string, peakHour: string) {
+  if (/cash|cod|cartsaver/i.test(channel)) {
+    return `Keep COD/WhatsApp recovery staffed around ${peakDay} ${peakHour}.`;
+  }
+  if (/meta|social/i.test(channel)) {
+    return `Schedule paid creative refresh and budget checks before ${peakDay} ${peakHour}.`;
+  }
+  if (/google/i.test(channel)) {
+    return `Protect search campaigns and SEO landing pages before ${peakDay} ${peakHour}.`;
+  }
+  return `Use ${peakDay} ${peakHour} as the main monitoring window for this channel.`;
+}
+
+function buildOrderingPattern(orders: Order[]): OrderingPattern {
+  const dayOrder = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  const dayRows = new Map<string, { day: string; orders: number; revenue: number }>();
+  const hourRows = new Map<number, { hour: number; orders: number; revenue: number }>();
+  const channelRows = new Map<string, {
+    channel: string;
+    orders: number;
+    revenue: number;
+    days: Map<string, number>;
+    hours: Map<number, number>;
+  }>();
+  const totalOrders = Math.max(orders.length, 1);
+
+  for (const day of dayOrder) dayRows.set(day, { day, orders: 0, revenue: 0 });
+  for (let hour = 0; hour < 24; hour += 1) hourRows.set(hour, { hour, orders: 0, revenue: 0 });
+
+  for (const order of orders) {
+    const { weekday, hour } = cairoOrderParts(order.created_at);
+    const revenue = Number(order.total_price || 0);
+    const day = dayRows.get(weekday) ?? { day: weekday, orders: 0, revenue: 0 };
+    day.orders += 1;
+    day.revenue += revenue;
+    dayRows.set(weekday, day);
+
+    const hourRow = hourRows.get(hour) ?? { hour, orders: 0, revenue: 0 };
+    hourRow.orders += 1;
+    hourRow.revenue += revenue;
+    hourRows.set(hour, hourRow);
+
+    const channel = channelName(order);
+    const channelRow = channelRows.get(channel) ?? {
+      channel,
+      orders: 0,
+      revenue: 0,
+      days: new Map<string, number>(),
+      hours: new Map<number, number>(),
+    };
+    channelRow.orders += 1;
+    channelRow.revenue += revenue;
+    channelRow.days.set(weekday, (channelRow.days.get(weekday) || 0) + 1);
+    channelRow.hours.set(hour, (channelRow.hours.get(hour) || 0) + 1);
+    channelRows.set(channel, channelRow);
+  }
+
+  const days = [...dayRows.values()].map((row) => {
+    const share = Math.round((row.orders / totalOrders) * 1000) / 10;
+    return {
+      day: row.day,
+      orders: row.orders,
+      revenue: money(row.revenue),
+      share,
+      recommendation: share >= 15
+        ? "Primary campaign day: launch or increase monitoring before this day."
+        : share >= 12
+          ? "Secondary campaign day: keep retargeting and recovery active."
+          : "Low-order day: use lighter spend or testing unless a campaign needs coverage.",
+    };
+  });
+
+  const hours = [...hourRows.values()]
+    .filter((row) => row.orders > 0)
+    .map((row) => ({
+      hour: row.hour,
+      label: hourLabel(row.hour),
+      orders: row.orders,
+      revenue: money(row.revenue),
+      share: Math.round((row.orders / totalOrders) * 1000) / 10,
+    }))
+    .sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)
+    .slice(0, 8);
+
+  const peakDay = [...days].sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)[0] ?? null;
+  const topDays = [...days].sort((a, b) => b.orders - a.orders || b.revenue - a.revenue);
+  const peakHour = hours[0] ?? null;
+  const channelTiming = [...channelRows.values()]
+    .sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)
+    .slice(0, 6)
+    .map((row) => {
+      const topDay = [...row.days.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No clear day";
+      const topHour = [...row.hours.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+      const peakHourLabel = hourLabel(topHour);
+      return {
+        channel: row.channel,
+        peakDay: topDay,
+        peakHour: peakHourLabel,
+        orders: row.orders,
+        revenue: money(row.revenue),
+        action: orderTimingAction(row.channel, topDay, peakHourLabel),
+      };
+    });
+
+  return {
+    timezone: "Africa/Cairo",
+    peakDay: peakDay?.day ?? null,
+    peakHour: peakHour?.label ?? null,
+    bestCampaignWindows: [
+      peakDay && peakHour ? `${peakDay.day} around ${peakHour.label}` : null,
+      topDays[1] && hours[1] ? `${topDays[1].day} around ${hours[1].label}` : null,
+    ].filter(Boolean) as string[],
+    days,
+    hours,
+    channelTiming,
+  };
 }
 
 function normalizeCityName(city?: string, province?: string) {
@@ -1239,7 +1446,7 @@ ${JSON.stringify(payload)}`,
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!hasShopifyKeys()) {
     return NextResponse.json(
       { isLive: false, error: "Shopify credentials are not configured" },
@@ -1248,11 +1455,7 @@ export async function GET() {
   }
 
   try {
-    const now = new Date();
-    const currentEnd = now.getTime();
-    const currentStart = currentEnd - 7 * 86400000;
-    const previousEnd = currentStart - 1;
-    const previousStart = previousEnd - 7 * 86400000;
+    const { fromDate, toDate, currentStart, currentEnd, previousStart, previousEnd } = parseReportWindow(request.url);
 
     const [orders, products, searchConsole, trends] = await Promise.all([
       fetchOrders(new Date(previousStart).toISOString(), new Date(currentEnd).toISOString()),
@@ -1273,6 +1476,7 @@ export async function GET() {
       o.fulfillment_status !== "fulfilled" &&
       ["pending", "authorized", "partially_paid"].includes(o.financial_status)
     ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const orderingPattern = buildOrderingPattern(currentOrders);
 
     const productComparison = compareRows(currentBreakdown.products, previousBreakdown.products, "key", true);
     const channelComparison = compareRows(currentBreakdown.channels, previousBreakdown.channels);
@@ -1327,6 +1531,7 @@ export async function GET() {
       window: {
         current: { from: new Date(currentStart).toISOString(), to: new Date(currentEnd).toISOString() },
         previous: { from: new Date(previousStart).toISOString(), to: new Date(previousEnd).toISOString() },
+        selected: { from: fromDate, to: toDate },
       },
       summary: {
         current,
@@ -1343,6 +1548,7 @@ export async function GET() {
       channels: channelComparison.slice(0, 8),
       cities: cityComparison.slice(0, 12),
       categories: categoryComparison.slice(0, 8),
+      orderingPattern,
       pendingWindow: { from: new Date(last24Start).toISOString(), to: new Date(currentEnd).toISOString(), label: "Last rolling 24 hours" },
       pendingTotal: pending24h.length,
       pendingOrders: pending24h.slice(0, 10).map((o) => ({

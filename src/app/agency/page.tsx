@@ -17,72 +17,40 @@ const reports = [
     audience: ["Marketing Team", "Content Creators"],
   },
   {
-    href: "/agency/weekly",
-    icon: CalendarRange,
-    title: "Weekly Report",
-    subtitle: "Every Monday",
-    description: "Full week strategy, competitor watch, day-by-day content plan, KPI targets.",
-    badge: "WEEKLY",
-    badgeColor: "bg-blue-500/20 text-blue-400",
-    iconColor: "text-blue-400",
-    audience: ["Management", "Marketing Team"],
-  },
-  {
     href: "/agency/growth",
     icon: TrendingUp,
-    title: "Growth Acceleration",
-    subtitle: "Shopify signal report",
-    description: "AOV drivers, premium product winners, Cartsaver CoD impact, stock risk, and a 48-hour action plan.",
-    badge: "GROWTH",
+    title: "Generated Growth Report",
+    subtitle: "Custom date range to today",
+    description: "Live Shopify, Search Console, sales channels, order days/hours, product actions, SEO actions, and recovery priorities.",
+    badge: "LIVE",
     badgeColor: "bg-green-500/20 text-green-400",
     iconColor: "text-green-400",
     audience: ["Management", "Marketing Team", "Merchandising"],
   },
   {
-    href: "/agency/monthly",
+    href: "/agency/weekly",
     icon: LineChart,
-    title: "Monthly Strategy",
-    subtitle: "1st of every month",
-    description: "Full market analysis, seasonal plan, campaign calendar, budget recommendations, KPI forecast.",
-    badge: "MONTHLY",
+    title: "Planning Reports",
+    subtitle: "Weekly, monthly, plan, calendar",
+    description: "One place for weekly strategy, monthly strategy, execution plan, and seasonal event calendar.",
+    badge: "PLANNING",
     badgeColor: "bg-purple-500/20 text-purple-400",
     iconColor: "text-purple-400",
-    audience: ["Management"],
-  },
-  {
-    href: "/monthly-plan",
-    icon: CalendarRange,
-    title: "Monthly Plan",
-    subtitle: "Execution calendar",
-    description: "Practical monthly actions, campaign timing, product focus, and team execution plan.",
-    badge: "PLAN",
-    badgeColor: "bg-cyan-500/20 text-cyan-400",
-    iconColor: "text-cyan-400",
     audience: ["Management", "Marketing Team"],
-  },
-  {
-    href: "/calendar",
-    icon: CalendarRange,
-    title: "Event Calendar",
-    subtitle: "Seasonal timing",
-    description: "Egypt seasonality, campaign moments, salary-week timing, and upcoming retail events.",
-    badge: "CALENDAR",
-    badgeColor: "bg-yellow-500/20 text-yellow-400",
-    iconColor: "text-yellow-400",
-    audience: ["Marketing Team", "Content Creators"],
+    quickLinks: [
+      { href: "/agency/weekly", label: "Weekly" },
+      { href: "/agency/monthly", label: "Monthly" },
+      { href: "/monthly-plan", label: "Plan" },
+      { href: "/calendar", label: "Calendar" },
+    ],
   },
 ];
 
 const reportGroups = [
   {
-    title: "Operate this week",
-    description: "Use these when the team needs current decisions: what is moving, what is slowing, what to push next.",
-    items: reports.filter((report) => ["/agency/flash", "/agency/weekly", "/agency/growth"].includes(report.href)),
-  },
-  {
-    title: "Plan next month",
-    description: "Use these when management needs budget direction, seasonal planning, and campaign calendar decisions.",
-    items: reports.filter((report) => ["/agency/monthly", "/monthly-plan", "/calendar"].includes(report.href)),
+    title: "Reports",
+    description: "Use Growth for live decisions, Flash for fast market ideas, and Planning for weekly/monthly calendars.",
+    items: reports,
   },
 ];
 
@@ -127,10 +95,9 @@ export default function AgencyHubPage() {
               <p className="text-xs text-muted mt-1">{group.description}</p>
             </div>
             <div className="grid gap-4">
-              {group.items.map(({ href, icon: Icon, title, subtitle, description, badge, badgeColor, iconColor, audience }) => (
-                <Link
+              {group.items.map(({ href, icon: Icon, title, subtitle, description, badge, badgeColor, iconColor, audience, quickLinks }) => (
+                <div
                   key={href}
-                  href={href}
                   className="bg-surface-2 border border-border rounded-xl p-5 hover:border-accent/40 transition-all group"
                 >
                   <div className="flex items-start justify-between">
@@ -153,11 +120,22 @@ export default function AgencyHubPage() {
                             </span>
                           ))}
                         </div>
+                        {quickLinks && (
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            {quickLinks.map((link) => (
+                              <Link key={link.href} href={link.href} className="text-xs bg-surface text-accent px-3 py-1.5 rounded-lg border border-border hover:border-accent/40">
+                                {link.label}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <ArrowRight className="w-5 h-5 text-muted group-hover:text-accent transition-colors flex-shrink-0" />
+                    <Link href={href} className="text-xs text-accent hover:underline flex items-center gap-1 flex-shrink-0">
+                      Open <ArrowRight className="w-4 h-4" />
+                    </Link>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </section>

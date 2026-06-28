@@ -38,12 +38,9 @@ const SECTIONS = [
   {
     href: "/agency", label: "Reports", icon: Briefcase,
     subs: [
-      { href: "/agency/flash", label: "Flash Brief (3-day)", group: "Operating reports" },
-      { href: "/agency/weekly", label: "Weekly report", group: "Operating reports" },
-      { href: "/agency/growth", label: "Growth acceleration", group: "Operating reports" },
-      { href: "/agency/monthly", label: "Monthly strategy", group: "Planning" },
-      { href: "/monthly-plan", label: "Monthly plan", group: "Planning" },
-      { href: "/calendar", label: "Event calendar", group: "Planning" },
+      { href: "/agency/growth", label: "Generated growth report", group: "Reports" },
+      { href: "/agency/flash", label: "Flash brief", group: "Reports" },
+      { href: "/agency", label: "Planning hub", group: "Reports" },
     ],
   },
 ];

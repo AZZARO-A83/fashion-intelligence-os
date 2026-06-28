@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  CalendarDays,
+  Clock,
   ExternalLink,
   MapPin,
   MessageSquareText,
@@ -23,7 +25,7 @@ type Report = {
   isLive: boolean;
   generatedAt: string;
   source: string;
-  window: { current: { from: string; to: string }; previous: { from: string; to: string } };
+  window: { current: { from: string; to: string }; previous: { from: string; to: string }; selected?: { from: string; to: string } };
   summary: {
     current: { orders: number; grossSales: number; netSales: number; aov: number };
     previous: { orders: number; grossSales: number; netSales: number; aov: number };
@@ -122,6 +124,15 @@ type Report = {
   channels: Array<{ name: string; orders: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   cities: Array<{ name: string; orders: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
   categories: Array<{ name: string; units: number; revenue: number; previousRevenue: number; previousUnits: number; revenueChange: number | null; unitChange: number | null; isNew: boolean }>;
+  orderingPattern?: {
+    timezone: string;
+    peakDay: string | null;
+    peakHour: string | null;
+    bestCampaignWindows: string[];
+    days: Array<{ day: string; orders: number; revenue: number; share: number; recommendation: string }>;
+    hours: Array<{ hour: number; label: string; orders: number; revenue: number; share: number }>;
+    channelTiming: Array<{ channel: string; peakDay: string; peakHour: string; orders: number; revenue: number; action: string }>;
+  };
   pendingOrders: Array<{ name: string; createdAt: string; financialStatus: string; fulfillmentStatus: string; total: number; city: string | null }>;
   pendingTotal?: number;
   pendingWindow?: { from: string; to: string; label: string };
@@ -240,6 +251,12 @@ function hoursAgo(iso: string) {
   return `${hours.toFixed(hours < 10 ? 1 : 0)}h ago`;
 }
 
+function inputDate(daysBack = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysBack);
+  return date.toISOString().slice(0, 10);
+}
+
 const growthMetricExplanations: Record<string, string> = {
   "Net sales": "Main money signal from Shopify orders in this report window.",
   Orders: "Demand volume. If orders fall, demand or conversion is the problem.",
@@ -298,12 +315,14 @@ export default function GrowthAccelerationReportPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fromDate, setFromDate] = useState(inputDate(6));
 
-  const load = async () => {
+  const load = async (nextFromDate = fromDate) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/agency/growth");
+      const params = new URLSearchParams({ from: nextFromDate, to: inputDate(0) });
+      const res = await fetch(`/api/agency/growth?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setReport(data);
@@ -315,7 +334,7 @@ export default function GrowthAccelerationReportPage() {
   };
 
   useEffect(() => {
-    load();
+    load(fromDate);
   }, []);
 
   return (
@@ -335,13 +354,26 @@ export default function GrowthAccelerationReportPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2">
+            <CalendarDays className="w-3.5 h-3.5 text-accent" />
+            <label className="text-xs text-muted" htmlFor="growth-from">From</label>
+            <input
+              id="growth-from"
+              type="date"
+              value={fromDate}
+              max={inputDate(0)}
+              onChange={(event) => setFromDate(event.target.value)}
+              className="bg-transparent text-xs text-foreground outline-none"
+            />
+            <span className="text-xs text-muted">to today</span>
+          </div>
           <button
-            onClick={load}
+            onClick={() => load(fromDate)}
             disabled={loading}
             className="flex items-center gap-2 px-3 py-2 bg-surface border border-border rounded-lg text-xs text-foreground-muted hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            {loading ? "Generating..." : "Generate report"}
           </button>
           <Link href="/agency" className="text-xs text-accent hover:underline flex items-center gap-1">
             Back to reports <ArrowRight className="w-3 h-3" />
@@ -374,7 +406,9 @@ export default function GrowthAccelerationReportPage() {
               <div>
                 <p className="text-sm font-bold text-green-400 mb-1">Authenticated live Shopify data</p>
                 <p className="text-sm text-foreground-muted">
-                  Source: {report.source}. Current window {formatDate(report.window.current.from)} to {formatDate(report.window.current.to)} compared with previous equal 7-day period.
+                  Source: {report.source}. Newly generated report: {formatDate(report.window.current.from)} to {formatDate(report.window.current.to)}.
+                  Old comparison report: {formatDate(report.window.previous.from)} to {formatDate(report.window.previous.to)}.
+                  Generated at {formatDateTime(report.generatedAt)}.
                 </p>
               </div>
             </div>
@@ -412,6 +446,7 @@ export default function GrowthAccelerationReportPage() {
 
           {report.aiSummary && <GrowthSummaryAdvice summary={report.aiSummary} diagnostics={report.diagnostics ?? []} />}
           {report.decisionReport && <DecisionReport report={report.decisionReport} />}
+          {report.orderingPattern && <OrderingPatternReport pattern={report.orderingPattern} />}
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
@@ -645,6 +680,87 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
           <div className="space-y-2">
             {report.dataNotes.map((item) => (
               <p key={item} className="text-xs text-foreground-muted leading-relaxed">{item}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["orderingPattern"]> }) {
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div>
+          <h2 className="font-bold text-foreground flex items-center gap-2">
+            <Clock className="w-4 h-4 text-accent" /> Ordering time and campaign focus
+          </h2>
+          <p className="text-xs text-muted mt-1">Order timestamps converted to {pattern.timezone}. Use this to choose campaign days, monitoring hours, and recovery staffing.</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-muted">Peak</p>
+          <p className="text-xs font-bold text-accent">{pattern.peakDay || "No day"} {pattern.peakHour ? `- ${pattern.peakHour}` : ""}</p>
+        </div>
+      </div>
+
+      {pattern.bestCampaignWindows.length > 0 && (
+        <div className="bg-accent/5 border border-accent/15 rounded-lg p-4 mb-5">
+          <p className="text-xs font-bold text-accent mb-2">Best campaign windows</p>
+          <div className="flex flex-wrap gap-2">
+            {pattern.bestCampaignWindows.map((window) => (
+              <span key={window} className="text-xs text-foreground bg-surface border border-border px-3 py-1.5 rounded-full">
+                {window}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid xl:grid-cols-3 gap-4">
+        <div className="bg-surface-2 border border-border rounded-lg p-4">
+          <p className="text-xs font-bold text-foreground mb-3">Days to focus campaigns</p>
+          <div className="space-y-2">
+            {pattern.days.map((row) => (
+              <div key={row.day} className="border-b border-border/60 pb-2 last:border-b-0 last:pb-0">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-foreground">{row.day}</p>
+                  <p className="text-xs text-accent">{row.share}% orders</p>
+                </div>
+                <p className="text-xs text-muted mt-1">{row.orders} orders - {money(row.revenue)}</p>
+                <p className="text-[11px] text-foreground-muted mt-1 leading-relaxed">{row.recommendation}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-surface-2 border border-border rounded-lg p-4">
+          <p className="text-xs font-bold text-foreground mb-3">Peak order hours</p>
+          <div className="space-y-2">
+            {pattern.hours.map((row) => (
+              <div key={row.label} className="grid grid-cols-[76px_1fr_auto] items-center gap-3 text-xs">
+                <span className="font-bold text-foreground">{row.label}</span>
+                <div className="h-2 bg-surface border border-border rounded-full overflow-hidden">
+                  <div className="h-full bg-accent" style={{ width: `${Math.min(100, row.share * 3)}%` }} />
+                </div>
+                <span className="text-muted">{row.orders} orders</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-surface-2 border border-border rounded-lg p-4">
+          <p className="text-xs font-bold text-foreground mb-3">Sales channels by timing</p>
+          <div className="space-y-3">
+            {pattern.channelTiming.map((row) => (
+              <div key={row.channel} className="border-b border-border/60 pb-3 last:border-b-0 last:pb-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs font-bold text-foreground">{row.channel}</p>
+                  <span className="text-[10px] text-accent">{row.peakDay} {row.peakHour}</span>
+                </div>
+                <p className="text-[11px] text-muted mt-1">{row.orders} orders - {money(row.revenue)}</p>
+                <p className="text-[11px] text-green-300 mt-1 leading-relaxed">Action: {row.action}</p>
+              </div>
             ))}
           </div>
         </div>
