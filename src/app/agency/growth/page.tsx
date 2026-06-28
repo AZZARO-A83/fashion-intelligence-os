@@ -691,6 +691,12 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
           </div>
         </div>
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <p className="text-xs font-bold text-blue-300 uppercase tracking-wide mb-2">Signal strength</p>
+          <div className="grid gap-2 mb-3">
+            <p className="text-xs text-foreground-muted leading-relaxed"><span className="font-bold text-foreground">1. Shopify:</span> highest trust. Use it for what actually sold, AOV, COD recovery, products, categories, cities, and order timing.</p>
+            <p className="text-xs text-foreground-muted leading-relaxed"><span className="font-bold text-foreground">2. Search Console:</span> high trust for search demand. Use it for queries, pages, CTR, impressions, and SEO work, not direct sales proof.</p>
+            <p className="text-xs text-foreground-muted leading-relaxed"><span className="font-bold text-foreground">3. Trend cache:</span> support signal only. Use it to reinforce creative/content direction when Shopify or Search Console already agrees.</p>
+          </div>
           <p className="text-xs font-bold text-blue-300 uppercase tracking-wide mb-2">Data notes</p>
           <div className="space-y-2">
             {report.dataNotes.map((item) => (
