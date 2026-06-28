@@ -720,7 +720,7 @@ function OrderingPatternReport({ report, pattern }: { report: Report; pattern: N
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] text-muted">Peak</p>
+          <p className="text-[10px] text-muted">Top day / top hour</p>
           <p className="text-xs font-bold text-accent">{pattern.peakDay || "No day"} {pattern.peakHour ? `- ${pattern.peakHour}` : ""}</p>
         </div>
       </div>
@@ -728,7 +728,7 @@ function OrderingPatternReport({ report, pattern }: { report: Report; pattern: N
       {pattern.bestCampaignWindows.length > 0 && (
         <div className="bg-accent/5 border border-accent/15 rounded-lg p-4 mb-5">
           <p className="text-xs font-bold text-accent mb-2">Best campaign windows</p>
-          <p className="text-[11px] text-muted mb-3">Highest ordering windows inside {analysisWindow}.</p>
+          <p className="text-[11px] text-muted mb-3">Highest combined weekday+hour slots inside {analysisWindow}.</p>
           <div className="flex flex-wrap gap-2">
             {pattern.bestCampaignWindows.map((window) => (
               <span key={window} className="text-xs text-foreground bg-surface border border-border px-3 py-1.5 rounded-full">
@@ -759,7 +759,7 @@ function OrderingPatternReport({ report, pattern }: { report: Report; pattern: N
 
         <div className="bg-surface-2 border border-border rounded-lg p-4">
           <p className="text-xs font-bold text-foreground mb-3">Peak order hours</p>
-          <p className="text-[11px] text-muted leading-relaxed mb-3">Top ordering hours during {analysisWindow}, shown in {pattern.timezone}.</p>
+          <p className="text-[11px] text-muted leading-relaxed mb-3">Orders grouped by hour across the full {analysisWindow} window, shown in {pattern.timezone}. Example: 18 orders means 18 total orders in that hour across the report period.</p>
           <div className="space-y-2">
             {pattern.hours.map((row) => (
               <div key={row.label} className="grid grid-cols-[76px_1fr_auto] items-center gap-3 text-xs">

@@ -1009,12 +1009,12 @@ function buildOrderingPattern(orders: Order[]): OrderingPattern {
   const dayOrder = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   const dayRows = new Map<string, { day: string; orders: number; revenue: number }>();
   const hourRows = new Map<number, { hour: number; orders: number; revenue: number }>();
+  const dayHourRows = new Map<string, { day: string; hour: number; orders: number; revenue: number }>();
   const channelRows = new Map<string, {
     channel: string;
     orders: number;
     revenue: number;
-    days: Map<string, number>;
-    hours: Map<number, number>;
+    dayHours: Map<string, { day: string; hour: number; orders: number; revenue: number }>;
   }>();
   const totalOrders = Math.max(orders.length, 1);
 
@@ -1034,18 +1034,25 @@ function buildOrderingPattern(orders: Order[]): OrderingPattern {
     hourRow.revenue += revenue;
     hourRows.set(hour, hourRow);
 
+    const dayHourKey = `${weekday}:${hour}`;
+    const dayHour = dayHourRows.get(dayHourKey) ?? { day: weekday, hour, orders: 0, revenue: 0 };
+    dayHour.orders += 1;
+    dayHour.revenue += revenue;
+    dayHourRows.set(dayHourKey, dayHour);
+
     const channel = channelName(order);
     const channelRow = channelRows.get(channel) ?? {
       channel,
       orders: 0,
       revenue: 0,
-      days: new Map<string, number>(),
-      hours: new Map<number, number>(),
+      dayHours: new Map<string, { day: string; hour: number; orders: number; revenue: number }>(),
     };
     channelRow.orders += 1;
     channelRow.revenue += revenue;
-    channelRow.days.set(weekday, (channelRow.days.get(weekday) || 0) + 1);
-    channelRow.hours.set(hour, (channelRow.hours.get(hour) || 0) + 1);
+    const channelDayHour = channelRow.dayHours.get(dayHourKey) ?? { day: weekday, hour, orders: 0, revenue: 0 };
+    channelDayHour.orders += 1;
+    channelDayHour.revenue += revenue;
+    channelRow.dayHours.set(dayHourKey, channelDayHour);
     channelRows.set(channel, channelRow);
   }
 
@@ -1077,15 +1084,18 @@ function buildOrderingPattern(orders: Order[]): OrderingPattern {
     .slice(0, 8);
 
   const peakDay = [...days].sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)[0] ?? null;
-  const topDays = [...days].sort((a, b) => b.orders - a.orders || b.revenue - a.revenue);
   const peakHour = hours[0] ?? null;
+  const bestDayHours = [...dayHourRows.values()]
+    .filter((row) => row.orders > 0)
+    .sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)
+    .slice(0, 2);
   const channelTiming = [...channelRows.values()]
     .sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)
     .slice(0, 6)
     .map((row) => {
-      const topDay = [...row.days.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No clear day";
-      const topHour = [...row.hours.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
-      const peakHourLabel = hourLabel(topHour);
+      const topSlot = [...row.dayHours.values()].sort((a, b) => b.orders - a.orders || b.revenue - a.revenue)[0];
+      const topDay = topSlot?.day || "No clear day";
+      const peakHourLabel = hourLabel(topSlot?.hour ?? 0);
       return {
         channel: row.channel,
         peakDay: topDay,
@@ -1100,10 +1110,7 @@ function buildOrderingPattern(orders: Order[]): OrderingPattern {
     timezone: "Africa/Cairo",
     peakDay: peakDay?.day ?? null,
     peakHour: peakHour?.label ?? null,
-    bestCampaignWindows: [
-      peakDay && peakHour ? `${peakDay.day} around ${peakHour.label}` : null,
-      topDays[1] && hours[1] ? `${topDays[1].day} around ${hours[1].label}` : null,
-    ].filter(Boolean) as string[],
+    bestCampaignWindows: bestDayHours.map((row) => `${row.day} ${hourLabel(row.hour)} (${row.orders} orders)`),
     days,
     hours,
     channelTiming,
