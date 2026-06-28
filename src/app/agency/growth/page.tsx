@@ -444,7 +444,7 @@ export default function GrowthAccelerationReportPage() {
 
           {report.aiSummary && <GrowthSummaryAdvice summary={report.aiSummary} diagnostics={report.diagnostics ?? []} />}
           {report.decisionReport && <DecisionReport report={report.decisionReport} />}
-          {report.orderingPattern && <OrderingPatternReport pattern={report.orderingPattern} />}
+          {report.orderingPattern && <OrderingPatternReport report={report} pattern={report.orderingPattern} />}
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
@@ -677,7 +677,10 @@ function DecisionReport({ report }: { report: NonNullable<Report["decisionReport
   );
 }
 
-function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["orderingPattern"]> }) {
+function OrderingPatternReport({ report, pattern }: { report: Report; pattern: NonNullable<Report["orderingPattern"]> }) {
+  const analysisWindow = `${formatDate(report.window.current.from)} to ${formatDate(report.window.current.to)}`;
+  const comparisonWindow = `${formatDate(report.window.previous.from)} to ${formatDate(report.window.previous.to)}`;
+
   return (
     <div className="bg-surface border border-border rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 mb-5">
@@ -685,7 +688,23 @@ function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["order
           <h2 className="font-bold text-foreground flex items-center gap-2">
             <Clock className="w-4 h-4 text-accent" /> Ordering time and campaign focus
           </h2>
-          <p className="text-xs text-muted mt-1">Order timestamps converted to {pattern.timezone}. Use this to choose campaign days, monitoring hours, and recovery staffing.</p>
+          <p className="text-xs text-muted mt-1">
+            Based on orders from {analysisWindow}. Comparison period: {comparisonWindow}. Times are converted to {pattern.timezone}.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <span className="text-[10px] text-foreground-muted bg-surface-2 border border-border px-2 py-1 rounded-full">
+              Analysis window: {analysisWindow}
+            </span>
+            <span className="text-[10px] text-foreground-muted bg-surface-2 border border-border px-2 py-1 rounded-full">
+              Old comparison: {comparisonWindow}
+            </span>
+            <span className="text-[10px] text-foreground-muted bg-surface-2 border border-border px-2 py-1 rounded-full">
+              Generated: {formatDateTime(report.generatedAt)}
+            </span>
+            <span className="text-[10px] text-foreground-muted bg-surface-2 border border-border px-2 py-1 rounded-full">
+              Timezone: {pattern.timezone}
+            </span>
+          </div>
         </div>
         <div className="text-right">
           <p className="text-[10px] text-muted">Peak</p>
@@ -696,6 +715,7 @@ function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["order
       {pattern.bestCampaignWindows.length > 0 && (
         <div className="bg-accent/5 border border-accent/15 rounded-lg p-4 mb-5">
           <p className="text-xs font-bold text-accent mb-2">Best campaign windows</p>
+          <p className="text-[11px] text-muted mb-3">Highest ordering windows inside {analysisWindow}.</p>
           <div className="flex flex-wrap gap-2">
             {pattern.bestCampaignWindows.map((window) => (
               <span key={window} className="text-xs text-foreground bg-surface border border-border px-3 py-1.5 rounded-full">
@@ -709,6 +729,7 @@ function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["order
       <div className="grid xl:grid-cols-3 gap-4">
         <div className="bg-surface-2 border border-border rounded-lg p-4">
           <p className="text-xs font-bold text-foreground mb-3">Days to focus campaigns</p>
+          <p className="text-[11px] text-muted leading-relaxed mb-3">Orders grouped by weekday for {analysisWindow}.</p>
           <div className="space-y-2">
             {pattern.days.map((row) => (
               <div key={row.day} className="border-b border-border/60 pb-2 last:border-b-0 last:pb-0">
@@ -725,6 +746,7 @@ function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["order
 
         <div className="bg-surface-2 border border-border rounded-lg p-4">
           <p className="text-xs font-bold text-foreground mb-3">Peak order hours</p>
+          <p className="text-[11px] text-muted leading-relaxed mb-3">Top ordering hours during {analysisWindow}, shown in {pattern.timezone}.</p>
           <div className="space-y-2">
             {pattern.hours.map((row) => (
               <div key={row.label} className="grid grid-cols-[76px_1fr_auto] items-center gap-3 text-xs">
@@ -740,6 +762,7 @@ function OrderingPatternReport({ pattern }: { pattern: NonNullable<Report["order
 
         <div className="bg-surface-2 border border-border rounded-lg p-4">
           <p className="text-xs font-bold text-foreground mb-3">Sales channels by timing</p>
+          <p className="text-[11px] text-muted leading-relaxed mb-3">Each channel's strongest weekday/hour inside {analysisWindow}.</p>
           <div className="space-y-3">
             {pattern.channelTiming.map((row) => (
               <div key={row.channel} className="border-b border-border/60 pb-3 last:border-b-0 last:pb-0">
