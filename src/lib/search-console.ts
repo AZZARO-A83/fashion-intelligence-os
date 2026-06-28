@@ -132,11 +132,11 @@ export function searchConsoleDemandSet(result: SearchConsoleResult | null | unde
   return new Set((result?.queries ?? []).map((q) => q.query.toLowerCase().trim()).filter(Boolean));
 }
 
-export async function fetchSearchConsoleQueries(): Promise<SearchConsoleResult> {
+export async function fetchSearchConsoleQueries(options: { startDate?: string; endDate?: string } = {}): Promise<SearchConsoleResult> {
   const siteUrl = requiredEnv("GSC_SITE_URL");
   const accessToken = await getAccessToken();
-  const startDate = process.env.GSC_START_DATE || isoDateDaysAgo(30);
-  const endDate = process.env.GSC_END_DATE || isoDateDaysAgo(2);
+  const startDate = options.startDate || process.env.GSC_START_DATE || isoDateDaysAgo(30);
+  const endDate = options.endDate || process.env.GSC_END_DATE || isoDateDaysAgo(2);
   const rowLimit = Math.min(Number(process.env.GSC_ROW_LIMIT || 250), 1000);
 
   const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;

@@ -317,6 +317,21 @@ function cairoDateString(date = new Date()) {
   }).format(date);
 }
 
+function utcDateDaysAgo(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function searchConsoleWindow(fromDate: string, toDate: string) {
+  const latestAvailable = utcDateDaysAgo(2);
+  const endDate = toDate < latestAvailable ? toDate : latestAvailable;
+  return {
+    startDate: fromDate <= endDate ? fromDate : endDate,
+    endDate,
+  };
+}
+
 function cairoStartOfDayMs(date: string) {
   return new Date(`${date}T00:00:00+02:00`).getTime();
 }
@@ -526,6 +541,7 @@ function buildDecisionReport(args: {
   const topProduct = productRows[0];
   const topChannel = channelRows[0];
   const topCity = cityRows[0];
+  const topCategoryProduct = topCategory ? productRows.find((row) => row.category === topCategory.name) || topProduct : topProduct;
   const revenue = Math.max(current.netSales, 1);
   const searchGroups = buildSearchGroups(searchConsole);
   const topSearchCategory = [...searchGroups.entries()].sort((a, b) => b[1].clicks - a[1].clicks || b[1].impressions - a[1].impressions)[0];
@@ -537,11 +553,11 @@ function buildDecisionReport(args: {
     : `Current 7-day revenue is holding: net sales ${pctLabel(revenueGrowth)}, orders ${pctLabel(ordersGrowth)}, AOV ${pctLabel(aovGrowth)}. Scale only the focus areas with sales depth, search demand, and stock support.`;
 
   const operatingMode = [
-    topCategory && topProduct ? {
+    topCategory && topCategoryProduct ? {
       focusArea: "Paid / COD sales",
       decision: `${topCategory.name} is the commercial base.`,
-      evidence: `${topCategory.name} generated ${egp(topCategory.revenue)} (${Math.round((topCategory.revenue / revenue) * 1000) / 10}% of revenue). ${topProduct.title} sold ${topProduct.units} units for ${egp(topProduct.revenue)}.`,
-      action: `Use ${topProduct.title} as the paid/COD hero only after size-level stock is checked. Build bundles from the same category to protect AOV.`,
+      evidence: `${topCategory.name} generated ${egp(topCategory.revenue)} (${Math.round((topCategory.revenue / revenue) * 1000) / 10}% of revenue). ${topCategoryProduct.title} sold ${topCategoryProduct.units} units for ${egp(topCategoryProduct.revenue)} inside this category.`,
+      action: `Use ${topCategoryProduct.title} as the paid/COD hero only after size-level stock is checked. Build bundles from the same category to protect AOV.`,
     } : null,
     topSearchCategory ? {
       focusArea: "Organic search",
@@ -571,6 +587,7 @@ function buildDecisionReport(args: {
   const categoryDecisions = categoryNames.slice(0, 8).map((category) => {
     const sales = categoryRows.find((row) => row.name === category);
     const search = searchGroups.get(category);
+    const categoryTopProduct = productRows.find((row) => row.category === category && row.units > 0);
     const salesSignal = sales
       ? `${egp(sales.revenue)}, ${sales.units} units, revenue ${pctLabel(sales.revenueChange)}`
       : "No current Shopify category row";
@@ -601,7 +618,7 @@ function buildDecisionReport(args: {
       searchSignal,
       trendSignal,
       decision,
-      exampleSteps: categoryExampleSteps({ category, decisionType, topProduct, search }),
+      exampleSteps: categoryExampleSteps({ category, decisionType, topProduct: categoryTopProduct, search }),
       details: categoryDetails(category, productRows),
     };
   });
@@ -921,9 +938,9 @@ function enforceSignalCoverage(
   return result;
 }
 
-async function fetchGrowthSearchConsole(): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
+async function fetchGrowthSearchConsole(window: { startDate: string; endDate: string }): Promise<{ data: SearchConsoleResult | null; error: string | null }> {
   try {
-    return { data: await fetchSearchConsoleQueries(), error: null };
+    return { data: await fetchSearchConsoleQueries(window), error: null };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Search Console unavailable" };
   }
@@ -962,18 +979,44 @@ function inRange(order: Order, start: number, end: number) {
   return t >= start && t <= end;
 }
 
-function periodStats(orders: Order[]) {
-  const nonVoided = orders.filter((o) => o.financial_status !== "voided");
-  const gross = orders.reduce((sum, order) => {
-    return sum + (order.line_items ?? []).reduce((x, item) => x + Number(item.price || 0) * item.quantity, 0);
+function reportableOrders(orders: Order[]) {
+  return orders.filter((order) => order.financial_status !== "voided");
+}
+
+function orderLineGross(order: Order) {
+  return (order.line_items ?? []).reduce((sum, item) => sum + Number(item.price || 0) * item.quantity, 0);
+}
+
+function orderRefundSubtotal(order: Order) {
+  return (order.refunds ?? []).reduce((sum, refund) => {
+    return sum + (refund.refund_line_items ?? []).reduce((lineSum: number, refundLine: any) => {
+      return lineSum + Number(refundLine.subtotal || 0);
+    }, 0);
   }, 0);
-  const discounts = orders.reduce((sum, o) => sum + Number(o.total_discounts || 0), 0);
-  const net = gross - discounts;
+}
+
+function orderMerchandiseNet(order: Order) {
+  return Math.max(0, orderLineGross(order) - Number(order.total_discounts || 0) - orderRefundSubtotal(order));
+}
+
+function lineMerchandiseNet(order: Order, item: NonNullable<Order["line_items"]>[number]) {
+  const gross = orderLineGross(order);
+  const lineGross = Number(item.price || 0) * item.quantity;
+  if (!gross || !lineGross) return 0;
+  return lineGross * (orderMerchandiseNet(order) / gross);
+}
+
+function periodStats(orders: Order[]) {
+  const activeOrders = reportableOrders(orders);
+  const gross = activeOrders.reduce((sum, order) => sum + orderLineGross(order), 0);
+  const discounts = activeOrders.reduce((sum, o) => sum + Number(o.total_discounts || 0), 0);
+  const refunds = activeOrders.reduce((sum, o) => sum + orderRefundSubtotal(o), 0);
+  const net = gross - discounts - refunds;
   return {
-    orders: orders.length,
+    orders: activeOrders.length,
     grossSales: money(gross),
     netSales: money(net),
-    aov: nonVoided.length ? money(net / nonVoided.length) : 0,
+    aov: activeOrders.length ? money(net / activeOrders.length) : 0,
   };
 }
 
@@ -1032,14 +1075,15 @@ function buildOrderingPattern(orders: Order[]): OrderingPattern {
     revenue: number;
     dayHours: Map<string, { day: string; hour: number; orders: number; revenue: number }>;
   }>();
-  const totalOrders = Math.max(orders.length, 1);
+  const activeOrders = reportableOrders(orders);
+  const totalOrders = Math.max(activeOrders.length, 1);
 
   for (const day of dayOrder) dayRows.set(day, { day, orders: 0, revenue: 0 });
   for (let hour = 0; hour < 24; hour += 1) hourRows.set(hour, { hour, orders: 0, revenue: 0 });
 
-  for (const order of orders) {
+  for (const order of activeOrders) {
     const { weekday, hour } = cairoOrderParts(order.created_at);
-    const revenue = Number(order.total_price || 0);
+    const revenue = orderMerchandiseNet(order);
     const day = dayRows.get(weekday) ?? { day: weekday, orders: 0, revenue: 0 };
     day.orders += 1;
     day.revenue += revenue;
@@ -1171,23 +1215,24 @@ function buildBreakdown(orders: Order[], products: Map<number, ProductInfo>) {
   const channels = new Map<string, any>();
   const cities = new Map<string, any>();
 
-  for (const order of orders) {
+  for (const order of reportableOrders(orders)) {
+    const orderRevenue = orderMerchandiseNet(order);
     const channel = channelName(order);
     if (!channels.has(channel)) channels.set(channel, { name: channel, orders: 0, revenue: 0 });
     channels.get(channel).orders += 1;
-    channels.get(channel).revenue += Number(order.total_price || 0);
+    channels.get(channel).revenue += orderRevenue;
 
     const cityKey = normalizeCityName(order.shipping_address?.city, order.shipping_address?.province);
     if (!cities.has(cityKey)) cities.set(cityKey, { name: cityKey, orders: 0, revenue: 0 });
     cities.get(cityKey).orders += 1;
-    cities.get(cityKey).revenue += Number(order.total_price || 0);
+    cities.get(cityKey).revenue += orderRevenue;
 
     for (const item of order.line_items ?? []) {
       const productInfo = item.product_id ? products.get(Number(item.product_id)) : undefined;
       const title = productInfo?.title || item.title;
       const category = inferCategory(title);
       const key = `${category}:${familyKey(title) || title.toLowerCase()}`;
-      const lineRevenue = Number(item.price || 0) * item.quantity;
+      const lineRevenue = lineMerchandiseNet(order, item);
 
       if (!productsMap.has(key)) {
         productsMap.set(key, {
@@ -1275,6 +1320,7 @@ function buildFindings(current: any, previous: any, currentBreakdown: any, previ
   const topProduct = productRows[0];
   const secondProduct = productRows[1];
   const topCategory = categoryRows[0];
+  const topCategoryProduct = topCategory ? productRows.find((row) => row.category === topCategory.name) || topProduct : topProduct;
   const topChannel = channelRows[0];
   const topCity = cityRows[0];
   const pendingValue = pending24h.reduce((sum, order) => sum + Number(order.total_price || 0), 0);
@@ -1299,14 +1345,14 @@ function buildFindings(current: any, previous: any, currentBreakdown: any, previ
     confidence: current.orders >= 50 ? 92 : current.orders >= 20 ? 84 : 72,
   });
 
-  if (topProduct && topCategory) {
+  if (topCategoryProduct && topCategory) {
     findings.push({
       type: "product-strategy",
-      title: `Product engine: ${topCategory.name} is the commercial focus, led by ${topProduct.title}`,
-      evidence: `${topCategory.name} generated EGP ${topCategory.revenue.toLocaleString("en-EG")} (${topCategoryShare}% of revenue). ${topProduct.title} alone generated EGP ${topProduct.revenue.toLocaleString("en-EG")} from ${topProduct.units} units (${topProductShare}% of revenue). ${secondProduct ? `Second product: ${secondProduct.title}, EGP ${secondProduct.revenue.toLocaleString("en-EG")}.` : ""}`,
-      action: `Build the next 48-hour push around this focus area: hero ${topProduct.title}, cross-sell the next strongest ${topCategory.name} product, and keep weaker categories out of paid traffic until they prove demand.`,
+      title: `Product engine: ${topCategory.name} is the commercial focus, led inside the category by ${topCategoryProduct.title}`,
+      evidence: `${topCategory.name} generated EGP ${topCategory.revenue.toLocaleString("en-EG")} (${topCategoryShare}% of revenue). ${topCategoryProduct.title} generated EGP ${topCategoryProduct.revenue.toLocaleString("en-EG")} from ${topCategoryProduct.units} units inside ${topCategory.name}. ${topProduct && topProduct.key !== topCategoryProduct.key ? `Overall top product family: ${topProduct.title}, EGP ${topProduct.revenue.toLocaleString("en-EG")}.` : secondProduct ? `Second product: ${secondProduct.title}, EGP ${secondProduct.revenue.toLocaleString("en-EG")}.` : ""}`,
+      action: `Build the next 48-hour push around this focus area: hero ${topCategoryProduct.title}, cross-sell the next strongest ${topCategory.name} product, and keep weaker categories out of paid traffic until they prove demand.`,
       confidence: 90,
-      productUrl: topProduct.url,
+      productUrl: topCategoryProduct.url,
     });
   }
 
@@ -1387,6 +1433,7 @@ function buildRuleBasedGrowthSummary(args: {
   const topChannel = channelRows[0];
   const topCity = cityRows[0];
   const topCategory = categoryRows[0];
+  const topCategoryProduct = topCategory ? productRows.find((row) => row.category === topCategory.name) || topProduct : topProduct;
   const topQuery = searchConsole?.queries?.[0];
   const topSeoAction = searchConsole?.pageOpportunities?.[0];
   const topTrend = trends.topTrends[0] || trends.demandMap[0];
@@ -1413,7 +1460,7 @@ function buildRuleBasedGrowthSummary(args: {
         ? `Highest SEO action: ${topSeoAction.action} for "${topSeoAction.query}" because ${topSeoAction.reason.toLowerCase()}`
         : "No page-level Search Console opportunity is available.",
       products: topProduct
-        ? `${topProduct.title} leads product movement; ${topCategory?.name || topProduct.category} is the main product focus.`
+        ? `${topProduct.title} leads product movement overall; ${topCategory?.name || topProduct.category} is the main category focus${topCategoryProduct ? `, led inside the category by ${topCategoryProduct.title}` : ""}.`
         : "No product movement rows are available.",
       channels: topChannel
         ? `${topChannel.name} is the strongest channel; ${topCity?.name || "no city"} is the strongest geo signal.`
@@ -1534,11 +1581,12 @@ export async function GET(request: Request) {
 
   try {
     const { fromDate, toDate, currentStart, currentEnd, previousStart, previousEnd } = parseReportWindow(request.url);
+    const gscWindow = searchConsoleWindow(fromDate, toDate);
 
     const [orders, products, searchConsole, trends] = await Promise.all([
       fetchOrders(new Date(previousStart).toISOString(), new Date(currentEnd).toISOString()),
       fetchProducts(),
-      fetchGrowthSearchConsole(),
+      fetchGrowthSearchConsole(gscWindow),
       fetchGrowthTrendContext(),
     ]);
 
@@ -1649,10 +1697,11 @@ export async function GET(request: Request) {
         : null,
       searchConsoleError: searchConsole.error,
       dataLimits: [
+        "Revenue uses merchandise net revenue: line-item sales minus order discounts and merchandise refunds. Shipping and taxes are excluded.",
         "New vs returning customer revenue requires longer customer order history than this 14-day diagnostic fetch.",
         "Inventory risk is based on active product variant inventory totals when available from Shopify products API.",
         "Channel labels are derived from Shopify order source, gateway, referrer, and landing fields; app-specific names depend on Shopify exposing them.",
-        "Search Console growth rows use Egypt web search data for the configured property only.",
+        "Search Console growth rows use Egypt web search data for the selected report window when available; Google Search Console usually lags by about two days.",
       ],
     });
   } catch (err) {
